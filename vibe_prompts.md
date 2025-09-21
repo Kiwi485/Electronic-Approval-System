@@ -17,4 +17,4 @@ index.html 作為主入口，直接寫入所有界面的 HTML 代碼用跳轉鏈
 使用真實的 UI 圖片，而非佔位符圖片 (可用 Unsplash、Pexels、Apple 官方 UI 資源中選取)。
 添加頂部狀態欄 (模擬 app 狀態欄)，並使用真實的狀態欄圖標 (可用 FontAwesome、Material Icons 中選取)。
 最後請以上要求生成完整的 HTML 代碼，並確保其可用於實際開發
-20
+200
