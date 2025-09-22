@@ -1,0 +1,17 @@
+# 系統檔 (mac / windows)
+.DS_Store
+Thumbs.db
+
+# IDE / 編輯器
+.vscode/
+.idea/
+
+# 暫存/編譯檔
+*.log
+*.out
+*.exe
+*.class
+*.o
+
+# 環境設定
+.env
