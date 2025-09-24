@@ -1,176 +1,75 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智慧簽單系統 - 歷史紀錄</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="styles/common.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧簽單系統 - 歷史紀錄</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="styles/common.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-    <!-- 導航列省略，與 index.html 相同 -->
-    
-    <div class="container-fluid">
-        <div class="row">
-            <!-- 左側選單省略，與 index.html 相同 -->
-
-            <!-- 主要內容區 -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">歷史紀錄</h1>
-                    
-                    <!-- 搜尋工具列 -->
-                    <div class="d-flex gap-2">
-                        <div class="input-group">
-                            <input type="text" class="form-control" placeholder="搜尋簽單...">
-                            <button class="btn btn-outline-secondary" type="button">
-                                <i class="bi bi-search"></i>
-                            </button>
-                        </div>
-                        <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel">
-                            <i class="bi bi-funnel"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 篩選面板 -->
-                <div class="collapse mb-3" id="filterPanel">
-                    <div class="card">
-                        <div class="card-body">
-                            <form class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label">日期範圍</label>
-                                    <div class="input-group">
-                                        <input type="date" class="form-control">
-                                        <span class="input-group-text">至</span>
-                                        <input type="date" class="form-control">
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">客戶名稱</label>
-                                    <input type="text" class="form-control">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">狀態</label>
-                                    <select class="form-select">
-                                        <option value="">全部</option>
-                                        <option value="completed">已完成</option>
-                                        <option value="pending">待簽核</option>
-                                        <option value="cancelled">已取消</option>
-                                    </select>
-                                </div>
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary">套用篩選</button>
-                                    <button type="reset" class="btn btn-outline-secondary">重置</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 歷史紀錄表格 -->
-                <div class="card">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>簽單編號</th>
-                                        <th>日期</th>
-                                        <th>客戶名稱</th>
-                                        <th>施工地點</th>
-                                        <th>金額</th>
-                                        <th>狀態</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>DN-2025091401</td>
-                                        <td>2025/09/14</td>
-                                        <td>台北營造公司</td>
-                                        <td>台北市信義區</td>
-                                        <td>NT$ 15,000</td>
-                                        <td><span class="badge bg-success">已完成</span></td>
-                                        <td>
-                                            <div class="btn-group">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="bi bi-eye"></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-secondary">
-                                                    <i class="bi bi-download"></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-info">
-                                                    <i class="bi bi-share"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>DN-2025091302</td>
-                                        <td>2025/09/13</td>
-                                        <td>新北工程行</td>
-                                        <td>新北市板橋區</td>
-                                        <td>NT$ 8,500</td>
-                                        <td><span class="badge bg-warning">待簽核</span></td>
-                                        <td>
-                                            <div class="btn-group">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="bi bi-eye"></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-danger">
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <!-- 更多歷史記錄... -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 分頁 -->
-                <nav class="mt-3">
-                    <ul class="pagination justify-content-center">
-                        <li class="page-item disabled">
-                            <a class="page-link" href="#" tabindex="-1">上一頁</a>
-                        </li>
-                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                        <li class="page-item"><a class="page-link" href="#">2</a></li>
-                        <li class="page-item"><a class="page-link" href="#">3</a></li>
-                        <li class="page-item">
-                            <a class="page-link" href="#">下一頁</a>
-                        </li>
-                    </ul>
-                </nav>
-            </main>
+  <div class="container-fluid">
+    <div class="row">
+      <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+          <h1 class="h2">簽單歷史紀錄</h1>
         </div>
-    </div>
 
-    <!-- 詳細資訊 Modal -->
-    <div class="modal fade" id="deliveryDetailModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">簽單詳細資訊</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <!-- 簽單詳細內容 -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
-                    <button type="button" class="btn btn-primary">下載 PDF</button>
-                </div>
-            </div>
+        <div class="card">
+          <div class="card-body">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>日期</th>
+                  <th>客戶名稱</th>
+                  <th>地點</th>
+                  <th>金額</th>
+                  <th>狀態</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
         </div>
+      </main>
     </div>
+  </div>
 
-    <!-- 行動版導航省略，與 index.html 相同 -->
+  <!-- Bootstrap Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Firebase & Firestore 讀取 -->
+  <script type="module">
+    import { db } from "./firebase-init.js";
+    import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
+
+    async function loadHistory() {
+      const tbody = document.getElementById("historyTable");
+      tbody.innerHTML = "";
+
+      const q = query(collection(db, "deliveryNotes"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${doc.id}</td>
+          <td>${d.date || "-"}</td>
+          <td>${d.customer || "-"}</td>
+          <td>${d.location || "-"}</td>
+          <td>NT$ ${d.amount || "0"}</td>
+          <td><span class="badge bg-success">已完成</span></td>
+          <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    loadHistory();
+  </script>
 </body>
 </html>

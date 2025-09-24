@@ -1,17 +1,61 @@
-# 系統檔 (mac / windows)
+# OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# IDE / 編輯器
+# Temporary files
+*~
+~$*
+*.tmp
+*.log
+
+# Editor / IDE
 .vscode/
 .idea/
+*.sublime-workspace
+*.sublime-project
 
-# 暫存/編譯檔
-*.log
-*.out
-*.exe
-*.class
-*.o
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# 環境設定
+# Build / Dist
+dist/
+build/
+out/
+
+# Environment / Secrets
 .env
+.env.*.local
+*.key
+*.pem
+*.secret
+serviceAccountKey.json
+firebase-adminsdk-*.json
+
+# Firebase local emulator / debug
+.firebase/
+firestore-debug.log
+ui-debug.log
+storage-debug.log
+pubsub-debug.log
+
+# Swap / backup files
+*.swp
+*.swo
+
+# Large binaries (consider Git LFS)
+*.psd
+*.ai
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+*.rar
+
+# OneDrive / sync metadata
+*.lnk

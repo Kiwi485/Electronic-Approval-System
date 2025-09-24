@@ -9,13 +9,8 @@
     <link href="styles/common.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-    <!-- 導航列省略，與 index.html 相同 -->
-    
     <div class="container-fluid">
         <div class="row">
-            <!-- 左側選單省略，與 index.html 相同 -->
-
-            <!-- 主要內容區 -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">新增簽單</h1>
@@ -23,16 +18,11 @@
 
                 <div class="card">
                     <div class="card-body">
-                        <form class="row g-3">
+                        <form class="row g-3" id="deliveryForm">
                             <!-- 基本資訊 -->
                             <div class="col-md-6">
                                 <label class="form-label">客戶名稱</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" list="customerList">
-                                    <button class="btn btn-outline-secondary" type="button">
-                                        <i class="bi bi-search"></i>
-                                    </button>
-                                </div>
+                                <input type="text" class="form-control" list="customerList" name="customer">
                                 <datalist id="customerList">
                                     <option value="台北營造公司">
                                     <option value="新北工程行">
@@ -42,129 +32,33 @@
 
                             <div class="col-md-6">
                                 <label class="form-label">日期</label>
-                                <input type="date" class="form-control" value="2025-09-14">
+                                <input type="date" class="form-control" name="date">
                             </div>
 
                             <div class="col-12">
                                 <label class="form-label">施工地點</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" placeholder="輸入地址">
-                                    <button class="btn btn-outline-secondary" type="button">
-                                        <i class="bi bi-geo-alt"></i>
-                                    </button>
-                                </div>
+                                <input type="text" class="form-control" name="location" placeholder="輸入地址">
                             </div>
 
-                            <!-- 工作內容 -->
                             <div class="col-md-12">
                                 <label class="form-label">作業狀況</label>
-                                <div class="input-group">
-                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                        快速選擇
-                                    </button>
-                                    <ul class="dropdown-menu">
-                                        <li><a class="dropdown-item" href="#">廢棄物清運</a></li>
-                                        <li><a class="dropdown-item" href="#">機具搬運</a></li>
-                                        <li><a class="dropdown-item" href="#">物料運送</a></li>
-                                    </ul>
-                                    <textarea class="form-control" rows="3"></textarea>
-                                    <button class="btn btn-outline-secondary" type="button">
-                                        <i class="bi bi-mic"></i>
-                                    </button>
-                                </div>
+                                <textarea class="form-control" rows="3" name="work"></textarea>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label">工作時間</label>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <div class="input-group">
-                                            <span class="input-group-text">起</span>
-                                            <input type="time" class="form-control">
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="input-group">
-                                            <span class="input-group-text">迄</span>
-                                            <input type="time" class="form-control">
-                                        </div>
-                                    </div>
-                                </div>
+                                <label class="form-label">工作時間 (起)</label>
+                                <input type="time" class="form-control" name="startTime">
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label">機具</label>
-                                <select class="form-select" multiple>
-                                    <option>挖土機</option>
-                                    <option>推土機</option>
-                                    <option>吊車</option>
-                                    <option>堆高機</option>
-                                </select>
-                            </div>
-
-                            <!-- 車輛資訊 -->
-                            <div class="col-md-6">
-                                <label class="form-label">車號</label>
-                                <input type="text" class="form-control" value="ABC-1234" readonly>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label">司機姓名</label>
-                                <input type="text" class="form-control" value="王小明" readonly>
-                            </div>
-
-                            <!-- 其他資訊 -->
-                            <div class="col-12">
-                                <label class="form-label">備註</label>
-                                <textarea class="form-control" rows="2"></textarea>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label">金額</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">NT$</span>
-                                    <input type="number" class="form-control" placeholder="0">
-                                </div>
-                            </div>
-
-                            <!-- 客戶簽名區 -->
-                            <div class="col-12">
-                                <label class="form-label">客戶簽名</label>
-                                <div class="signature-pad mb-2"></div>
-                                <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm">
-                                        <i class="bi bi-arrow-counterclockwise"></i> 重新簽名
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- 照片上傳 -->
-                            <div class="col-12">
-                                <label class="form-label">現場照片</label>
-                                <div class="d-flex gap-2 mb-2">
-                                    <button type="button" class="btn btn-outline-primary">
-                                        <i class="bi bi-camera"></i> 拍照
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary">
-                                        <i class="bi bi-file-earmark-image"></i> 選擇照片
-                                    </button>
-                                </div>
-                                <div class="row g-2">
-                                    <div class="col-4">
-                                        <div class="card">
-                                            <img src="https://via.placeholder.com/150" class="card-img-top" alt="照片預覽">
-                                            <button type="button" class="btn btn-link text-danger btn-sm position-absolute top-0 end-0">
-                                                <i class="bi bi-x-circle-fill"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                <label class="form-label">工作時間 (迄)</label>
+                                <input type="time" class="form-control" name="endTime">
                             </div>
 
                             <!-- 送出按鈕 -->
                             <div class="col-12 mt-4">
                                 <div class="d-flex gap-2 justify-content-end">
-                                    <button type="button" class="btn btn-secondary">
+                                    <button type="reset" class="btn btn-secondary">
                                         <i class="bi bi-x-lg"></i> 取消
                                     </button>
                                     <button type="submit" class="btn btn-primary">
@@ -178,9 +72,42 @@
             </main>
         </div>
     </div>
+    
+    
 
-    <!-- 行動版導航省略，與 index.html 相同 -->
+   <script type="module">
+    console.log("🚀 new-delivery.js 已經開始執行");
+    import { db } from "./firebase-init.js";
+    import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    const form = document.getElementById("deliveryForm");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const data = {
+        customer: form.querySelector("input[list='customerList']").value,
+        date: form.querySelector("input[type='date']").value,
+        location: form.querySelector("input[placeholder='輸入地址']").value,
+        work: form.querySelector("textarea").value,
+        startTime: form.querySelectorAll("input[type='time']")[0].value,
+        endTime: form.querySelectorAll("input[type='time']")[1].value,
+        createdAt: serverTimestamp(),
+      };
+
+      console.log("📌 即將送出的資料:", data);
+
+      try {
+        const docRef = await addDoc(collection(db, "deliveryNotes"), data);
+        console.log("✅ 新增成功! ID:", docRef.id);
+        alert("完成簽單成功！");
+        form.reset();
+      } catch (error) {
+        console.error("❌ 新增失敗:", error);
+        alert("送出失敗，請檢查 Console。");
+      }
+    });
+</script>
+
+
 </body>
 </html>
