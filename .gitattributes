@@ -1,14 +1,14 @@
-@'
+﻿# .gitattributes - normalize line endings to LF in repo
 * text=auto
 
-# Force LF for text files
+# Force LF for common text files
 *.json text eol=lf
-*.md text eol=lf
+*.md   text eol=lf
 *.html text eol=lf
-*.css text eol=lf
-*.js text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
 *.rules text eol=lf
-*.txt text eol=lf
+*.txt  text eol=lf
 
 # Binary files
 *.png binary
@@ -16,4 +16,3 @@
 *.jpeg binary
 *.gif binary
 *.pdf binary
-'@ | Out-File -FilePath .\.gitattributes -Encoding utf8 -Force
