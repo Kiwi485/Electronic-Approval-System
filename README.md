@@ -1,196 +1,145 @@
 # 智慧簽單及派工系統 (Electronic-Approval-System)
 
-簡短說明：智慧簽單及派工系統，支援精準工時計算、彈性機具管理、多平台離線/同步功能，前端採用 Blazor WebAssembly，後端採用 Firebase（Authentication, Firestore, Storage, Functions, Hosting, Messaging）。
-
-## 主要特色
-- 工時計算：記錄開始/結束時間，自動計算總工時（支援跨日與小數表示）。
-- 機具管理：支援多選機具、臨時新增機具、後台維護與使用率統計。
-- 記錄完整性：簽單包含日期、客戶、施工地點、作業狀況、車號、司機、金額、備註、客戶簽章等欄位。
-- 離線支援：行動裝置可離線填寫簽單，網路恢復後自動同步。
-- 即時通知：結合 Firebase Cloud Messaging 發送新工作與狀態更新通知。
-
-## 主要使用者
-- 司機：戶外作業者，使用行動裝置完成簽單與簽名。
-- 客戶：在現場進行簽名確認。
-- 後台管理人員：管理客戶、機具、檢視報表與財務整合。
-
-## 核心功能摘要
-
-1. 簽單管理
-	- 欄位：日期、客戶名稱、施工地點、作業狀況、開始/結束時間、總工時、機具、車號、司機、金額、備註、客戶簽章。
-	- 功能：PDF 匯出、列印、郵件寄送、歷史紀錄查詢。
-
-2. 機具管理
-	- 多選機具、快速選單、臨時新增機具。
-	- 後台可新增/編輯/停用機具，系統記錄使用頻率與時數，支援報表篩選。
-
-3. 時間與報表
-	- 自動工時計算、跨日支援、工時分析（依客戶/機具/期間）。
-
-4. 身分驗證與安全
-	- Firebase Authentication（支援 LINE、Email、手機驗證）。
-	- Firestore 安全規則、HTTPS 傳輸、操作日誌、資料備份。
-
-## 技術架構
-- 前端：Blazor WebAssembly（.NET 7+）、PWA 支援、選用 UI 元件庫（Blazorise / MudBlazor）。
-- 後端：Firebase（Authentication, Cloud Firestore, Cloud Storage, Cloud Functions, Hosting, Cloud Messaging）。
-- 離線儲存：IndexedDB / LocalStorage（同步策略與衝突解決）。
-
-## prototype（原型）
-- 位置：`prototype/` 資料夾。包含 `index.html`, `new-delivery.html`, `history.html` 等頁面，可在瀏覽器中開啟預覽。
-
-## 如何開始（快速）
-1. 開啟 `prototype/index.html` 在瀏覽器查看 UI 原型。
-2. 若要以 Blazor 實作前端，請建立 Blazor WebAssembly 專案，並安裝 Firebase .NET SDK 進行整合。
-
-## 後續建議
-- 實作用户測試以驗證司機在戶外環境之操作流暢度。
-- 設計離線同步優先策略，避免資料衝突。
-- 建立機具資料匯入機制，方便大量上傳既有機具資料。
+智慧簽單及派工系統，支援精準工時計算、彈性機具管理、多平台離線/同步功能。  
+前端採用 **Firebase Web SDK**，後端採用 **Firebase**（Authentication, Firestore, Storage, Functions, Hosting, Messaging）。
 
 ---
 
-如需我把某段內容放到 `spec.md` 或產生更詳細的開發任務清單，我可以接著幫您產出。
-
-了解 ✅
-我幫你把 **常見問題 (FAQ)** 也寫進 `README.md`，這樣 teammate 碰到你之前遇到的狀況，就不用再一個一個問你。
+## 🎯 專案狀態
+✅ **Firebase 環境已就緒** - Auth, Firestore, Storage, Emulator 已設定完成  
+✅ **資料流程已驗證** - deliveryNotes 能成功寫入 Firestore  
+🚧 **開發進行中** - 4 個核心功能正在實作  
 
 ---
 
-以下是完整的 `README.md` 範本，你可以直接 copy ⬇️
+## ✨ 主要特色
+- **工時計算**：記錄開始/結束時間，自動計算總工時（支援跨日與小數表示）。
+- **機具管理**：支援多選機具、臨時新增機具、後台維護與使用率統計。
+- **記錄完整性**：簽單包含日期、客戶、施工地點、作業狀況、車號、司機、金額、備註、客戶簽章等欄位。
+- **離線支援**：行動裝置可離線填寫簽單，網路恢復後自動同步。
+- **即時通知**：整合 Firebase Cloud Messaging，發送新工作與狀態更新通知。
+
+---
+
+## ✅ 環境驗收標準
+- Emulator UI 能看到 Firestore/Auth/Storage 服務  
+- 填寫表單送出後，`deliveryNotes` collection 出現新資料  
+- Browser Console 沒有 Firebase 連接錯誤  
+- 能正常在不同頁面間導航  
+
+---
+
+## 📋 當前開發任務（Sprint 1）
+🎯 **目標**：完成端到端 Demo  
+⏳ **時程**：3–5 天  
+🏆 **成功標準**：能錄製 1 分鐘影片展示「登入 → 填表 → 簽名 → 送出 → History 查看」  
+
+| Issue | 功能                 | 負責人 | 狀態       | 檔案                          |
+|-------|----------------------|--------|------------|-------------------------------|
+| #1    | 工時計算 & 表單驗證  | 待分配 | 🔄 進行中  | `js/form-validation.js`       |
+| #2    | 簽名 Canvas & Storage | 待分配 | 🔄 進行中  | `js/signature.js`             |
+| #3    | Firebase Auth 整合   | 待分配 | 🔄 進行中  | `js/auth.js`                  |
+| #4    | History & 離線同步   | 待分配 | 🔄 進行中  | `js/history.js, js/offline.js`|
+
+---
+
+## 🧪 測試流程
+### 基礎測試
+1. 開啟 `http://localhost:3000/new-delivery.html`  
+2. 填寫表單各欄位  
+3. 點擊「完成簽單」  
+4. 檢查 Emulator UI (`http://localhost:4000`) → Firestore → `deliveryNotes`  
+5. 確認新資料出現且格式正確  
+
+### 整合測試
+- **登入測試**：使用 `dev@example.com / test123`  
+- **工時測試**：測試同日與跨日時間計算  
+- **簽名測試**：Canvas 簽名並確認上傳到 Storage  
+- **離線測試**：關閉網路填表 → 開啟網路 → 確認同步  
+
+
+## 🚀 開發環境設定（已驗證可用）
+
+### 前置條件
+- **Node.js 18+** → [下載](https://nodejs.org/)  
+- **Firebase CLI** → `npm i -g firebase-tools`  
+- **http-server** → `npm i -g http-server`  
+
+### 快速啟動（PowerShell）
+```powershell
+# 1. Clone 專案
+git clone https://github.com/Kiwi485/Electronic-Approval-System.git
+cd Electronic-Approval-System
+
+# 2. 啟動 Firebase Emulator  
+firebase emulators:start
+# 🔗 Emulator UI: http://localhost:4000
+
+# 3. 啟動前端（另開 PowerShell 視窗）
+npx http-server .\prototype -p 3000
+# 🔗 前端: http://localhost:3000/new-delivery.html
+
+
+了解 👍 你要的是把 **所有 FAQ 的問題與答案** 完整收錄成 **Markdown Q\&A 文件**。以下是整理好的版本：
 
 ````markdown
-# 智慧簽單系統 (Firebase Prototype)
-
-這是我們團隊的 Firebase Demo 專案，包含以下功能：
-- Firestore：儲存簽單資料
-- Authentication：登入 (目前先測試用)
-- Storage：存照片檔案 (預留)
-
----
-
-## 🚀 開發環境安裝
-
-1. **安裝 Node.js**
-   - [Node.js LTS 版本](https://nodejs.org/en/) (建議 v18 以上)
-   - 安裝完後檢查：
-     ```bash
-     node -v
-     npm -v
-     ```
-
-2. **安裝 Firebase CLI**
-   ```bash
-   npm install -g firebase-tools
-````
-
-檢查版本：
-
-```bash
-firebase --version
-```
-
-3. **安裝本地伺服器**
-
-   ```bash
-   npm install -g http-server
-   ```
-
----
-
-## ⚡ 本地測試步驟
-
-1. 啟動 Firebase Emulator (Firestore + Auth + Storage)
-
-   ```bash
-   firebase emulators:start
-   ```
-
-   預設埠口：
-
-   * Firestore → 8080
-   * Auth → 9099
-   * Storage → 9199
-   * Emulator UI → 4000 → [http://127.0.0.1:4000](http://127.0.0.1:4000)
-
-2. 開啟本地伺服器 (另外開一個終端機)
-
-   ```bash
-   npx http-server ./prototype -p 3000
-   ```
-
-   網址 → [http://127.0.0.1:3000](http://127.0.0.1:3000)
-
-3. 開啟 `new-delivery.html`
-   填寫表單 → 送出 → 確認 Firestore 有出現新資料。
-
----
-
-## 👥 分工 (可調整)
-
-* `index.html` → XXX 負責
-* `history.html` → XXX 負責
-* `new-delivery.html` → XXX 負責
-* `firebase-init.js` → 已設定好，不要亂動
-
----
-
 ## ❓ 常見問題 (FAQ)
 
-### 1. 為什麼跑 `firebase` 指令說找不到？
+### 1. 為什麼 `firebase` 指令找不到？
+- **問題**：PowerShell 顯示「firebase 不是內部或外部命令」  
+- **解決方案**：確認已安裝 Firebase CLI →  
+  ```powershell
+  npm i -g firebase-tools
+````
 
-➡ 代表 **npm 沒有裝好或 PATH 沒設定**。請重新安裝 Node.js (記得勾選 *Add to PATH*)，再跑：
-
-```bash
-npm install -g firebase-tools
-```
-
-### 2. 為什麼 `firebase emulators:start` 一直說 "port 被佔用"？
-
-➡ 有可能 emulator 沒關乾淨。解決方法：
-
-* 把之前的 emulator 視窗關掉 (CTRL + C)
-* 或是重新開機再跑
-
-### 3. 為什麼瀏覽器開啟 `new-delivery.html` 沒有顯示資料？
-
-➡ 請確認：
-
-* Emulator 有啟動 (`http://127.0.0.1:4000`)
-* Console 有印出「📌 即將送出的資料」
-* Firestore → `deliveryNotes` collection 有新文件
-
-### 4. 為什麼 `npm` 或 `firebase` 說 **因為 PowerShell 禁止執行**？
-
-➡ 請在 PowerShell 輸入：
-
-```bash
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-然後重新開機。
-
-### 5. teammate 需要裝什麼？
-
-➡ 需要自己安裝：
-
-* Node.js
-* Firebase CLI
-* http-server (建議)
-  ➡ 其他東西直接 `git pull` 專案即可。
+並重新啟動終端機
 
 ---
 
-## ✅ 完成驗收方式
+### 2. Emulator 說 port 被佔用？
 
-* 本地開 `http://127.0.0.1:3000/new-delivery.html`
-* 填寫簽單 → 點「完成簽單」
-* Firestore (Emulator UI 4000) 看到新文件
-
-```
+* **問題**：`firebase emulators:start` 顯示 port 4000/8080 被佔用
+* **解決方案**：關閉已佔用的程式，或在 `firebase.json` 中修改 port
 
 ---
 
-要不要我幫你把 **圖片 (螢幕截圖)** 的操作路徑也加進 README？這樣 teammate 就算沒經驗，也能跟著點。
+### 3. 表單送出後沒有資料？
+
+* **問題**：點擊送出後 Firestore 沒有新資料
+* **檢查清單**：
+
+  * Emulator 有啟動且 UI 可訪問 ([http://localhost:4000](http://localhost:4000))
+  * Browser Console 有印出「📌 即將送出的資料」
+  * 沒有 JavaScript 錯誤
+  * 表單所有必填欄位都有填寫
+
+---
+
+### 4. PowerShell 執行政策問題
+
+* **問題**：「因為這個系統上已停用指令碼執行」
+* **解決方案**：執行
+
+  ```powershell
+  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+  ```
+
+---
+
+### 5. 團隊成員需要安裝什麼？
+
+* **問題**：新成員加入時，需要安裝哪些環境？
+* **解決方案**：
+
+  * **最小需求**：
+
+    * Node.js（自行安裝）
+    * Firebase CLI（自行安裝）
+    * http-server（自行安裝）
+  * **其他檔案**：透過 `git pull` 取得即可
+
 ```
-da
+
+這樣所有 FAQ 的 **問題 + 答案** 都完整收錄了 ✅  
+要不要我幫你把這份 FAQ **單獨存成 `FAQ.md` 檔案**，方便團隊成員快速查看？
+```
