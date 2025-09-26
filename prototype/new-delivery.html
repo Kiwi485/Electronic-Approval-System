@@ -55,6 +55,26 @@
                                 <input type="time" class="form-control" name="endTime">
                             </div>
 
+                            <!-- 客戶簽名區域 -->
+                            <div class="col-12">
+                                <label class="form-label">客戶手寫簽名</label>
+                                <div class="border rounded p-2 bg-white">
+                                    <canvas id="signatureCanvas" class="w-100" style="height: 200px; touch-action: none;"></canvas>
+                                </div>
+                                <div class="d-flex gap-2 mt-2">
+                                    <button type="button" id="clearSignatureBtn" class="btn btn-outline-secondary">
+                                        <i class="bi bi-eraser"></i> 清除簽名
+                                    </button>
+                                    <button type="button" id="previewSignatureBtn" class="btn btn-outline-primary">
+                                        <i class="bi bi-eye"></i> 預覽簽名
+                                    </button>
+                                </div>
+                                <div class="mt-2">
+                                    <img id="signaturePreview" class="img-thumbnail d-none" alt="簽名預覽" style="max-height: 160px;" />
+                                    <div id="signatureError" class="text-danger small mt-1 d-none">請先於上方畫布簽名後再提交。</div>
+                                </div>
+                            </div>
+
                             <!-- 送出按鈕 -->
                             <div class="col-12 mt-4">
                                 <div class="d-flex gap-2 justify-content-end">
@@ -75,37 +95,91 @@
     
     
 
-   <script type="module">
-    console.log("🚀 new-delivery.js 已經開始執行");
-    import { db } from "./firebase-init.js";
-    import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
+     <script type="module">
+        console.log("🚀 new-delivery.js 已經開始執行");
+        import { db } from "./firebase-init.js";
+        import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
+        import { initSignaturePad, isSignatureEmpty, getSignatureBlob, clearSignature, getSignatureDataURL } from "./js/signature.js";
+        import { uploadSignatureWithRetry } from "./js/firebase-storage.js";
 
-    const form = document.getElementById("deliveryForm");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+        // 初始化簽名板
+        initSignaturePad({
+            canvasId: "signatureCanvas",
+            clearBtnId: "clearSignatureBtn",
+        });
 
-      const data = {
-        customer: form.querySelector("input[list='customerList']").value,
-        date: form.querySelector("input[type='date']").value,
-        location: form.querySelector("input[placeholder='輸入地址']").value,
-        work: form.querySelector("textarea").value,
-        startTime: form.querySelectorAll("input[type='time']")[0].value,
-        endTime: form.querySelectorAll("input[type='time']")[1].value,
-        createdAt: serverTimestamp(),
-      };
+        // 預覽按鈕
+        const previewBtn = document.getElementById("previewSignatureBtn");
+        const previewImg = document.getElementById("signaturePreview");
+        previewBtn.addEventListener("click", () => {
+            if (isSignatureEmpty()) {
+                document.getElementById("signatureError").classList.remove("d-none");
+                return;
+            }
+            document.getElementById("signatureError").classList.add("d-none");
+            const dataUrl = getSignatureDataURL(0.7);
+            previewImg.src = dataUrl;
+            previewImg.classList.remove("d-none");
+        });
 
-      console.log("📌 即將送出的資料:", data);
+        const form = document.getElementById("deliveryForm");
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
 
-      try {
-        const docRef = await addDoc(collection(db, "deliveryNotes"), data);
-        console.log("✅ 新增成功! ID:", docRef.id);
-        alert("完成簽單成功！");
-        form.reset();
-      } catch (error) {
-        console.error("❌ 新增失敗:", error);
-        alert("送出失敗，請檢查 Console。");
-      }
-    });
+            // 檢查是否有簽名
+            if (isSignatureEmpty()) {
+                document.getElementById("signatureError").classList.remove("d-none");
+                alert("請先完成客戶簽名");
+                return;
+            }
+            document.getElementById("signatureError").classList.add("d-none");
+
+            // 取得壓縮後的 Blob（<= 300KB）
+            let signatureBlob;
+            try {
+                signatureBlob = await getSignatureBlob({ maxSizeBytes: 300 * 1024 });
+            } catch (err) {
+                console.error("❌ 產生簽名圖片失敗:", err);
+                alert("產生簽名圖片失敗，請重試");
+                return;
+            }
+
+            // 上傳到 Firebase Storage（含重試）
+            let signatureUrl = "";
+            try {
+                const { downloadURL } = await uploadSignatureWithRetry(signatureBlob, { pathPrefix: "signatures", maxRetries: 3 });
+                signatureUrl = downloadURL;
+            } catch (err) {
+                console.error("❌ 上傳簽名失敗:", err);
+                alert("上傳簽名失敗，已嘗試多次，請稍後再試");
+                return;
+            }
+
+            const data = {
+                customer: form.querySelector("input[list='customerList']").value,
+                date: form.querySelector("input[type='date']").value,
+                location: form.querySelector("input[placeholder='輸入地址']").value,
+                work: form.querySelector("textarea").value,
+                startTime: form.querySelectorAll("input[type='time']")[0].value,
+                endTime: form.querySelectorAll("input[type='time']")[1].value,
+                signatureUrl,
+                createdAt: serverTimestamp(),
+            };
+
+            console.log("📌 即將送出的資料:", data);
+
+            try {
+                const docRef = await addDoc(collection(db, "deliveryNotes"), data);
+                console.log("✅ 新增成功! ID:", docRef.id);
+                alert("完成簽單成功！");
+                form.reset();
+                clearSignature();
+                previewImg.classList.add("d-none");
+            } catch (error) {
+                console.error("❌ 新增失敗:", error);
+                alert("送出失敗，請檢查 Console。");
+            }
+        });
 </script>
 
 
