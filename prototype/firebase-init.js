@@ -25,10 +25,11 @@ const storage = getStorage(app);
 
 // 如果在本地 → 使用 emulator
 if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-  connectFirestoreEmulator(db, "localhost", 8080);
-  connectAuthEmulator(auth, "http://localhost:9099");
-  connectStorageEmulator(storage, "localhost", 9199);
-  console.log("✅ Connected to Firebase Emulators");
+  // 與 firebase.json 對齊的高位埠設定
+  connectFirestoreEmulator(db, "localhost", 58080);
+  connectAuthEmulator(auth, "http://localhost:59099");
+  connectStorageEmulator(storage, "localhost", 59199);
+  console.log("✅ Connected to Firebase Emulators (ports: fs=58080, auth=59099, storage=59199)");
 }
 
 
