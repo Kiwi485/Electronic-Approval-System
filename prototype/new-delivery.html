@@ -135,9 +135,9 @@
             document.getElementById("signatureError").classList.add("d-none");
 
             // 取得壓縮後的 Blob（<= 300KB）
-            let signatureBlob;
+                    let signatureBlob;
             try {
-                signatureBlob = await getSignatureBlob({ maxSizeBytes: 300 * 1024 });
+                        signatureBlob = await getSignatureBlob({ maxSizeBytes: 300 * 1024, initialQuality: 0.7 });
             } catch (err) {
                 console.error("❌ 產生簽名圖片失敗:", err);
                 alert("產生簽名圖片失敗，請重試");
