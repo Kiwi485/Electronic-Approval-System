@@ -55,6 +55,31 @@
                                 <input type="time" class="form-control" name="endTime">
                             </div>
 
+                            <!-- 客戶簽名區域 -->
+                            <div class="col-12 mt-4">
+                                <label class="form-label">客戶簽名 <span class="text-danger">*</span></label>
+                                <div class="border rounded p-3" style="background-color: #f8f9fa;">
+                                    <canvas id="signatureCanvas" 
+                                            style="width: 100%; height: 200px; border: 2px dashed #dee2e6; background: white; border-radius: 4px; cursor: crosshair;">
+                                        您的瀏覽器不支援 Canvas，請更新瀏覽器版本。
+                                    </canvas>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <div>
+                                            <small class="text-muted">請在上方區域簽名確認</small>
+                                            <div id="signatureInfo" class="small text-muted mt-1"></div>
+                                        </div>
+                                        <div>
+                                            <button type="button" id="clearSignature" class="btn btn-sm btn-outline-secondary me-2">
+                                                <i class="bi bi-eraser"></i> 清除
+                                            </button>
+                                            <button type="button" id="previewSignature" class="btn btn-sm btn-outline-info" disabled>
+                                                <i class="bi bi-eye"></i> 預覽
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 送出按鈕 -->
                             <div class="col-12 mt-4">
                                 <div class="d-flex gap-2 justify-content-end">
@@ -73,37 +98,165 @@
         </div>
     </div>
     
+    <!-- 簽名預覽 Modal -->
+    <div class="modal fade" id="signaturePreviewModal" tabindex="-1" aria-labelledby="signaturePreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="signaturePreviewModalLabel">
+                        <i class="bi bi-eye"></i> 客戶簽名預覽
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="signaturePreviewImage" src="" alt="簽名預覽" class="img-fluid border rounded" style="max-height: 400px;">
+                    <div id="signaturePreviewInfo" class="mt-3 text-muted"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
     
+    <!-- Bootstrap Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
    <script type="module">
     console.log("🚀 new-delivery.js 已經開始執行");
     import { db } from "./firebase-init.js";
     import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
+    import { SignaturePad } from "./js/signature.js";
+    import { uploadSignature, validateSignatureSize } from "./js/firebase-storage.js";
+
+    // 初始化簽名板
+    const signaturePad = new SignaturePad('signatureCanvas');
+    const clearBtn = document.getElementById('clearSignature');
+    const previewBtn = document.getElementById('previewSignature');
+    const signatureInfo = document.getElementById('signatureInfo');
+
+    // 清除簽名功能
+    clearBtn.addEventListener('click', () => {
+      signaturePad.clearCanvas();
+      previewBtn.disabled = true;
+      signatureInfo.textContent = '';
+    });
+
+    // 預覽簽名功能
+    previewBtn.addEventListener('click', () => {
+      const dataURL = signaturePad.getSignatureData();
+      const sizeInfo = validateSignatureSize(signaturePad.getCanvas());
+      
+      document.getElementById('signaturePreviewImage').src = dataURL;
+      document.getElementById('signaturePreviewInfo').innerHTML = `
+        <div class="row">
+          <div class="col-md-6">
+            <strong>檔案大小:</strong> ${sizeInfo.sizeKB} KB
+          </div>
+          <div class="col-md-6">
+            <strong>狀態:</strong> 
+            <span class="${sizeInfo.valid ? 'text-success' : 'text-warning'}">
+              ${sizeInfo.valid ? '✓ 符合規格' : '⚠ 檔案較大'}
+            </span>
+          </div>
+        </div>
+      `;
+      
+      const modal = new bootstrap.Modal(document.getElementById('signaturePreviewModal'));
+      modal.show();
+    });
+
+    // 監聽 Canvas 變化，啟用預覽按鈕
+    const canvas = signaturePad.getCanvas();
+    let lastImageData = null;
+    
+    const checkSignatureChange = () => {
+      const currentImageData = canvas.toDataURL();
+      if (currentImageData !== lastImageData) {
+        lastImageData = currentImageData;
+        if (!signaturePad.isCanvasEmpty()) {
+          previewBtn.disabled = false;
+          const sizeInfo = validateSignatureSize(canvas);
+          signatureInfo.textContent = `檔案大小: ${sizeInfo.sizeKB}KB ${sizeInfo.valid ? '✓' : '(過大)'}`;
+          signatureInfo.className = sizeInfo.valid ? 'small text-success mt-1' : 'small text-warning mt-1';
+        } else {
+          previewBtn.disabled = true;
+          signatureInfo.textContent = '';
+        }
+      }
+    };
+
+    // 使用 MutationObserver 監聽 Canvas 變化
+    const observer = new MutationObserver(checkSignatureChange);
+    observer.observe(canvas, { attributes: true, childList: true, subtree: true });
+
+    // 也監聽滑鼠和觸控事件
+    ['mouseup', 'touchend'].forEach(eventType => {
+      canvas.addEventListener(eventType, () => setTimeout(checkSignatureChange, 100));
+    });
 
     const form = document.getElementById("deliveryForm");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const data = {
-        customer: form.querySelector("input[list='customerList']").value,
-        date: form.querySelector("input[type='date']").value,
-        location: form.querySelector("input[placeholder='輸入地址']").value,
-        work: form.querySelector("textarea").value,
-        startTime: form.querySelectorAll("input[type='time']")[0].value,
-        endTime: form.querySelectorAll("input[type='time']")[1].value,
-        createdAt: serverTimestamp(),
-      };
+      // 檢查簽名是否存在
+      if (signaturePad.isCanvasEmpty()) {
+        alert("請先完成客戶簽名後再送出！");
+        return;
+      }
 
-      console.log("📌 即將送出的資料:", data);
+      // 檢查檔案大小
+      const sizeValidation = validateSignatureSize(signaturePad.getCanvas());
+      if (!sizeValidation.valid) {
+        if (!confirm(`簽名檔案較大 (${sizeValidation.sizeKB}KB)，可能影響上傳速度。確定要繼續嗎？`)) {
+          return;
+        }
+      }
 
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn.innerHTML;
+      
       try {
+        // 顯示上傳中狀態
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="bi bi-upload"></i> 上傳簽名中...';
+
+        // 上傳簽名到 Firebase Storage
+        const signatureUrl = await uploadSignature(signaturePad.getCanvas());
+
+        // 顯示儲存中狀態
+        submitBtn.innerHTML = '<i class="bi bi-save"></i> 儲存資料中...';
+
+        const data = {
+          customer: form.querySelector("input[list='customerList']").value,
+          date: form.querySelector("input[type='date']").value,
+          location: form.querySelector("input[placeholder='輸入地址']").value,
+          work: form.querySelector("textarea").value,
+          startTime: form.querySelectorAll("input[type='time']")[0].value,
+          endTime: form.querySelectorAll("input[type='time']")[1].value,
+          signatureUrl: signatureUrl, // 新增簽名 URL
+          createdAt: serverTimestamp(),
+        };
+
+        console.log("📌 即將送出的資料:", data);
+
         const docRef = await addDoc(collection(db, "deliveryNotes"), data);
         console.log("✅ 新增成功! ID:", docRef.id);
         alert("完成簽單成功！");
+        
+        // 重置表單和簽名
         form.reset();
+        signaturePad.clearCanvas();
+        previewBtn.disabled = true;
+        signatureInfo.textContent = '';
+        
       } catch (error) {
-        console.error("❌ 新增失敗:", error);
-        alert("送出失敗，請檢查 Console。");
+        console.error("❌ 處理失敗:", error);
+        alert(`送出失敗: ${error.message}`);
+      } finally {
+        // 恢復按鈕狀態
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
       }
     });
 </script>
