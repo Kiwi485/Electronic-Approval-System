@@ -16,22 +16,48 @@
           <h1 class="h2">簽單歷史紀錄</h1>
         </div>
 
-        <div class="card">
+        <div class="card mb-3">
           <div class="card-body">
-            <table class="table table-striped">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>日期</th>
-                  <th>客戶名稱</th>
-                  <th>地點</th>
-                  <th>金額</th>
-                  <th>狀態</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="historyTable"></tbody>
-            </table>
+            <div class="row g-3 align-items-end">
+              <div class="col-sm-4">
+                <label class="form-label mb-1">客戶搜尋</label>
+                <input type="text" id="searchCustomer" class="form-control" placeholder="輸入客戶名稱關鍵字">
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label mb-1">日期</label>
+                <input type="date" id="searchDate" class="form-control">
+              </div>
+              <div class="col-sm-5 small">
+                <div class="d-flex flex-column gap-1">
+                  <div class="text-muted"><i class="bi bi-info-circle"></i> 黃色列代表尚未同步的離線資料</div>
+                  <div id="offlineStatus" class="small fw-semibold"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:14%">ID</th>
+                    <th style="width:12%">日期</th>
+                    <th style="width:15%">客戶名稱</th>
+                    <th style="width:20%">地點</th>
+                    <th style="width:10%">金額</th>
+                    <th style="width:15%">工時</th>
+                    <th style="width:8%">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTable"></tbody>
+              </table>
+            </div>
+            <nav class="p-3">
+              <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+            </nav>
           </div>
         </div>
       </main>
@@ -40,36 +66,26 @@
 
   <!-- Bootstrap Bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- 離線管理 & 歷史頁面腳本 -->
+  <script type="module" src="js/offline.js"></script>
+  <script type="module" src="js/history.js"></script>
 
-  <!-- Firebase & Firestore 讀取 -->
-  <script type="module">
-    import { db } from "./firebase-init.js";
-    import { collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
-
-    async function loadHistory() {
-      const tbody = document.getElementById("historyTable");
-      tbody.innerHTML = "";
-
-      const q = query(collection(db, "deliveryNotes"), orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
-
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${doc.id}</td>
-          <td>${d.date || "-"}</td>
-          <td>${d.customer || "-"}</td>
-          <td>${d.location || "-"}</td>
-          <td>NT$ ${d.amount || "0"}</td>
-          <td><span class="badge bg-success">已完成</span></td>
-          <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    loadHistory();
-  </script>
+  <!-- 詳情 Modal -->
+  <div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">簽單詳細資訊</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- 動態填入 -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

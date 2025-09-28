@@ -75,38 +75,9 @@
     
     
 
-   <script type="module">
-    console.log("🚀 new-delivery.js 已經開始執行");
-    import { db } from "./firebase-init.js";
-    import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
-
-    const form = document.getElementById("deliveryForm");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const data = {
-        customer: form.querySelector("input[list='customerList']").value,
-        date: form.querySelector("input[type='date']").value,
-        location: form.querySelector("input[placeholder='輸入地址']").value,
-        work: form.querySelector("textarea").value,
-        startTime: form.querySelectorAll("input[type='time']")[0].value,
-        endTime: form.querySelectorAll("input[type='time']")[1].value,
-        createdAt: serverTimestamp(),
-      };
-
-      console.log("📌 即將送出的資料:", data);
-
-      try {
-        const docRef = await addDoc(collection(db, "deliveryNotes"), data);
-        console.log("✅ 新增成功! ID:", docRef.id);
-        alert("完成簽單成功！");
-        form.reset();
-      } catch (error) {
-        console.error("❌ 新增失敗:", error);
-        alert("送出失敗，請檢查 Console。");
-      }
-    });
-</script>
+        <!-- 離線管理與新增簽單腳本 -->
+        <script type="module" src="js/offline.js"></script>
+        <script type="module" src="js/new-delivery.js"></script>
 
 
 </body>
