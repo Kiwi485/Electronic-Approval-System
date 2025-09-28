@@ -2,12 +2,8 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
-      // allow reads only for authenticated users
-      allow read: if request.auth != null;
-
-      // allow writes only for authenticated users and limit file size to 10MB
-      allow write: if request.auth != null
-                   && request.resource.size < 10 * 1024 * 1024;
+      // 本機 Emulator 測試期間：開放讀寫（請勿用於正式環境）
+      allow read, write: if true;
     }
   }
 }
