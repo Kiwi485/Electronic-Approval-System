@@ -1,35 +1,33 @@
 // prototype/firebase-init.js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-app.js";
-import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js";
-import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-auth.js";
-import { getStorage, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js";
+// 使用 CDN ES module 版本（9.22.1），並匯出 db, auth, storage
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
+import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
+import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
+import { getAnalytics } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-analytics.js';
 
-// ⚡ 用你的 Firebase Console 設定
+// 真實 Firebase config（由使用者提供）
 const firebaseConfig = {
-  apiKey: "你的 API KEY",
-  authDomain: "electronic-approval-dev.firebaseapp.com",
-  projectId: "electronic-approval-dev",
-  storageBucket: "electronic-approval-dev.appspot.com",
-  messagingSenderId: "xxxxxxx",
-  appId: "xxxxxxxx"
+  apiKey: "AIzaSyAil2nwTz1GxGMLH_xems7zwVs2J1i0YFk",
+  authDomain: "smart-system-f188f.firebaseapp.com",
+  projectId: "smart-system-f188f",
+  storageBucket: "smart-system-f188f.firebasestorage.app",
+  messagingSenderId: "11088320717",
+  appId: "1:11088320717:web:05473e6ca7f6a657747184",
+  measurementId: "G-B82CNKKGR1"
 };
 
-// 初始化 Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+let analytics;
+try {
+  analytics = getAnalytics(app);
+} catch (e) {
+  // analytics may fail in some environments; ignore
+}
 
-// 初始化服務
 const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-
-// 如果在本地 → 使用 emulator
-if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-  connectFirestoreEmulator(db, "localhost", 8080);
-  connectAuthEmulator(auth, "http://localhost:9099");
-  connectStorageEmulator(storage, "localhost", 9199);
-  console.log("✅ Connected to Firebase Emulators");
-}
-
-
-export { db, auth, storage };
+export { app, analytics, db, auth, storage };
