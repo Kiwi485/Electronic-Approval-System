@@ -73,11 +73,58 @@
         </div>
     </div>
     
+    <!-- 司機資訊（自動填） -->
+    <div id="authBadge"></div>
+    
     
 
         <!-- 離線管理與新增簽單腳本 -->
         <script type="module" src="js/offline.js"></script>
         <script type="module" src="js/new-delivery.js"></script>
+        <script type="module">
+            import { onAuthChange, signOut } from './js/auth.js';
+
+            onAuthChange((user) => {
+                const driverElId = 'driverName';
+                const vehicleElId = 'vehicleNumber';
+                let driverEl = document.getElementById(driverElId);
+                let vehicleEl = document.getElementById(vehicleElId);
+                if (!driverEl) {
+                    // append fields if missing
+                    const container = document.querySelector('.card-body form .row') || document.querySelector('.card-body form');
+                    const div1 = document.createElement('div');
+                    div1.className = 'col-md-6';
+                    div1.innerHTML = '<label class="form-label">車號</label><input id="vehicleNumber" type="text" class="form-control" readonly placeholder="請先登入以自動帶入車號">';
+                    const div2 = document.createElement('div');
+                    div2.className = 'col-md-6';
+                    div2.innerHTML = '<label class="form-label">司機姓名</label><input id="driverName" type="text" class="form-control" readonly placeholder="請先登入以自動帶入司機名稱">';
+                    container.insertBefore(div1, container.firstChild);
+                    container.insertBefore(div2, container.firstChild.nextSibling);
+                    driverEl = document.getElementById(driverElId);
+                    vehicleEl = document.getElementById(vehicleElId);
+                }
+
+                const badge = document.getElementById('authBadge');
+                badge.innerHTML = '';
+                if (user) {
+                    const name = user.displayName || user.email.split('@')[0];
+                    if (driverEl) driverEl.value = name;
+                    if (vehicleEl) vehicleEl.value = 'V001';
+                    badge.innerHTML = `<div class="position-fixed top-0 end-0 m-3"><div class="btn-group"><button class="btn btn-sm btn-outline-primary">歡迎，${name}</button><button id="btnSignOut" class="btn btn-sm btn-outline-danger">登出</button></div></div>`;
+                    document.getElementById('btnSignOut').addEventListener('click', async () => {
+                        await signOut();
+                        if (driverEl) driverEl.value = '';
+                        if (vehicleEl) vehicleEl.value = '';
+                        window.location.href = './login.html';
+                    });
+                } else {
+                    // redirect to login and remember returnTo
+                    const params = new URLSearchParams();
+                    params.set('returnTo', window.location.pathname.split('/').pop());
+                    window.location.href = `./login.html?${params.toString()}`;
+                }
+            });
+        </script>
 
 
 </body>
