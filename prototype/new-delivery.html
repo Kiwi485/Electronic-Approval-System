@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
     <link href="styles/common.css" rel="stylesheet">
+    
 </head>
 <body class="bg-light">
     <div class="container-fluid">
@@ -18,50 +19,108 @@
 
                 <div class="card">
                     <div class="card-body">
-                        <form class="row g-3" id="deliveryForm">
+                        <form class="row g-3" id="deliveryForm" novalidate>
                             <!-- 基本資訊 -->
                             <div class="col-md-6">
-                                <label class="form-label">客戶名稱</label>
-                                <input type="text" class="form-control" list="customerList" name="customer">
+                                <label for="customer" class="form-label">客戶名稱 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" list="customerList" name="customer" id="customer" data-required>
                                 <datalist id="customerList">
                                     <option value="台北營造公司">
                                     <option value="新北工程行">
                                     <option value="台中營建工程">
                                 </datalist>
+                                <div class="invalid-feedback">請輸入客戶名稱</div>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label">日期</label>
-                                <input type="date" class="form-control" name="date">
+                                <label for="date" class="form-label">日期 <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="date" id="date" data-required>
+                                <div class="invalid-feedback">請選擇日期</div>
                             </div>
 
                             <div class="col-12">
-                                <label class="form-label">施工地點</label>
-                                <input type="text" class="form-control" name="location" placeholder="輸入地址">
+                                <label for="location" class="form-label">施工地點 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="location" id="location" placeholder="輸入地址" data-required>
+                                <div class="invalid-feedback">請輸入施工地點</div>
                             </div>
 
                             <div class="col-md-12">
-                                <label class="form-label">作業狀況</label>
-                                <textarea class="form-control" rows="3" name="work"></textarea>
+                                <label for="work" class="form-label">作業狀況</label>
+                                <textarea class="form-control" rows="3" name="work" id="work" placeholder="描述作業內容..."></textarea>
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label">工作時間 (起)</label>
-                                <input type="time" class="form-control" name="startTime">
+                            <div class="col-md-4">
+                                <label for="startTime" class="form-label">工作時間 (起) <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" name="startTime" id="startTime" data-required pattern="^([01]\\d|2[0-3]):[0-5]\\d$">
+                                <div class="invalid-feedback">請輸入有效開始時間 (00:00~23:59)</div>
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label">工作時間 (迄)</label>
-                                <input type="time" class="form-control" name="endTime">
+                            <div class="col-md-4">
+                                <label for="endTime" class="form-label">工作時間 (迄) <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" name="endTime" id="endTime" data-required pattern="^([01]\\d|2[0-3]):[0-5]\\d$">
+                                <div class="invalid-feedback">請輸入有效結束時間</div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label d-flex justify-content-between">
+                                    <span>總工時 (小時)</span>
+                                    <span class="text-muted small">四捨五入至 0.1</span>
+                                </label>
+                                <input type="text" class="form-control" id="totalHours" readonly placeholder="—">
+                            </div>
+
+                            <div class="col-md-4 d-flex align-items-center">
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="crossDay">
+                                    <label class="form-check-label" for="crossDay">
+                                        跨日（結束時間為次日）
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label for="amount" class="form-label">金額 (NT$) <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="amount" data-required inputmode="numeric" placeholder="例如：12,000">
+                                <input type="hidden" name="amount" id="amountRaw">
+                                <div class="invalid-feedback">請輸入有效金額（僅數字）</div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="alert alert-info py-2">
+                                    本簽單建立後仍為 <strong>待簽章</strong> 狀態，請稍後由現場或客戶於「簽章頁」補簽。
+                                </div>
+                            </div>
+
+                            <!-- 其他資訊：機具、車號、司機姓名、備註（非必填，可自行調整） -->
+                            <div class="col-md-4">
+                                <label for="machine" class="form-label">機具</label>
+                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="vehicleNumber" class="form-label">車號</label>
+                                <input type="text" class="form-control" name="vehicleNumber" id="vehicleNumber" placeholder="例如：ABC-1234">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="driverName" class="form-label">司機姓名</label>
+                                <input type="text" class="form-control" name="driverName" id="driverName" placeholder="司機">
+                            </div>
+                            <div class="col-md-12">
+                                <label for="remark" class="form-label">備註</label>
+                                <textarea class="form-control" rows="2" name="remark" id="remark" placeholder="其他說明..."></textarea>
+                            </div>
+
+                            <!-- 全域錯誤訊息 -->
+                            <div class="col-12">
+                                <div id="formGlobalError" class="alert alert-danger py-2 px-3 d-none small"></div>
                             </div>
 
                             <!-- 送出按鈕 -->
-                            <div class="col-12 mt-4">
+                            <div class="col-12 mt-2">
                                 <div class="d-flex gap-2 justify-content-end">
-                                    <button type="reset" class="btn btn-secondary">
+                                    <button type="reset" class="btn btn-secondary" id="resetBtn">
                                         <i class="bi bi-x-lg"></i> 取消
                                     </button>
-                                    <button type="submit" class="btn btn-primary">
+                                    <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
                                         <i class="bi bi-check-lg"></i> 完成簽單
                                     </button>
                                 </div>
@@ -72,13 +131,10 @@
             </main>
         </div>
     </div>
-    
-    
 
-        <!-- 離線管理與新增簽單腳本 -->
-        <script type="module" src="js/offline.js"></script>
-        <script type="module" src="js/new-delivery.js"></script>
-
-
+    <!-- 離線管理與新增簽單腳本 -->
+    <script type="module" src="js/offline.js"></script>
+    <script type="module" src="js/new-delivery.js"></script>
+    <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
 </body>
 </html>

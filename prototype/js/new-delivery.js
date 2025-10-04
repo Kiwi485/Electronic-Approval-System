@@ -1,5 +1,6 @@
 // new-delivery.js - 處理新增簽單 (含離線提交)
 import { db } from '../firebase-init.js';
+import { buildValidatedPayload } from './form-validation.js';
 import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { offlineManager } from './offline.js';
 
@@ -7,19 +8,6 @@ console.log('🚀 new-delivery.js 已載入');
 
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
-
-function gatherFormData() {
-  return {
-    localId: crypto.randomUUID(),
-    customer: form.querySelector("input[list='customerList']").value.trim(),
-    date: form.querySelector("input[type='date']").value,
-    location: form.querySelector("input[name='location']").value.trim(),
-    work: form.querySelector('textarea[name="work"]').value.trim(),
-    startTime: form.querySelectorAll("input[type='time']")[0].value,
-    endTime: form.querySelectorAll("input[type='time']")[1].value,
-    createdAt: new Date().toISOString(),
-  };
-}
 
 async function submitOnline(data) {
   const payload = { ...data, offline: false, serverCreatedAt: serverTimestamp() };
@@ -31,12 +19,23 @@ async function submitOnline(data) {
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!submitBtn) return;
+  // 向驗證模組取得驗證後 payload
+  const v = buildValidatedPayload();
+  if (!v.ok) {
+    alert('請先修正表單錯誤');
+    return;
+  }
+  const baseData = v.data;
+  const data = {
+    localId: crypto.randomUUID(),
+    ...baseData,
+    signatureStatus: baseData.signatureStatus || 'pending',
+    createdAt: new Date().toISOString()
+  };
   submitBtn.disabled = true;
   const originalText = submitBtn.innerHTML;
   submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>處理中...';
-
-  const data = gatherFormData();
-  console.log('📌 表單資料:', data);
+  console.log('📌 表單資料(驗證後):', data);
 
   const finish = (ok, msg) => {
     alert(msg);

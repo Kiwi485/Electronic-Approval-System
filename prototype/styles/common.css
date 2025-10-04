@@ -65,3 +65,45 @@
         z-index: 1000;
     }
 }
+/* --- 表單：簽名與驗證樣式（合併自原本預計的 form.css） --- */
+.signature-wrapper {
+    position: relative;
+    user-select: none;
+    touch-action: none;
+    max-width: 100%;
+}
+
+.signature-wrapper canvas {
+    width: 100%;
+    border: 1px dashed #bbb;
+    background: #fff;
+    cursor: crosshair;
+}
+
+#totalHours {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    text-align: center;
+}
+
+.is-invalid {
+    border-color: #dc3545 !important;
+}
+
+.is-valid {
+    border-color: #198754 !important;
+}
+
+#formGlobalError {
+    font-size: 0.85rem;
+}
+
+.invalid-feedback {
+    font-size: 0.75rem;
+}
+
+@media (max-width: 576px) {
+    .signature-wrapper canvas {
+        height: 150px;
+    }
+}

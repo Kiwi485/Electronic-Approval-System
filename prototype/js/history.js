@@ -76,13 +76,17 @@ function renderTable() {
   pageItems.forEach(item => {
     const tr = document.createElement('tr');
     if (item.offline) tr.classList.add('table-warning');
+    const sigStatus = item.signatureStatus || (item.signatureDataUrl ? 'completed' : 'pending');
+    const sigBadge = sigStatus === 'completed'
+      ? '<span class="badge bg-success">已簽</span>'
+      : '<span class="badge bg-warning text-dark">待簽</span>';
     tr.innerHTML = `
       <td title="${item.offline ? '離線暫存尚未同步' : ''}">${item.id || item.localId || '-'}</td>
       <td>${formatDate(item.date || item.createdAt)}</td>
       <td>${item.customer || '-'}</td>
       <td>${item.location || '-'}</td>
       <td>${item.amount ? 'NT$ ' + item.amount : '-'}</td>
-      <td>${formatTimeRange(item)}</td>
+      <td>${sigBadge}</td>
       <td>
         <button class="btn btn-sm btn-outline-primary" data-id="${item.id || item.localId}" data-local="${!!item.offline}"><i class="bi bi-eye"></i></button>
       </td>
@@ -130,8 +134,9 @@ tbody?.addEventListener('click', (e) => {
       <div class="col-6"><strong>客戶:</strong> ${item.customer || '-'}</div>
       <div class="col-12"><strong>地點:</strong> ${item.location || '-'}</div>
       <div class="col-12"><strong>作業狀況:</strong><br>${(item.work || '').replace(/\n/g,'<br>') || '-'}</div>
-      <div class="col-6"><strong>時間:</strong> ${formatTimeRange(item)}</div>
-      <div class="col-6"><strong>金額:</strong> ${item.amount ? 'NT$ ' + item.amount : '-'}</div>
+      <div class="col-4"><strong>時間:</strong> ${formatTimeRange(item)}</div>
+      <div class="col-4"><strong>金額:</strong> ${item.amount ? 'NT$ ' + item.amount : '-'}</div>
+      <div class="col-4"><strong>簽章狀態:</strong> ${(item.signatureStatus || (item.signatureDataUrl ? 'completed' : 'pending')) === 'completed' ? '<span class=\'badge bg-success\'>已簽章</span>' : '<span class=\'badge bg-warning text-dark\'>待簽章</span>'}</div>
       <div class="col-6"><strong>LocalId:</strong> ${item.localId || '-'}</div>
       <div class="col-6"><strong>狀態:</strong> ${item.offline ? '<span class="badge bg-warning text-dark">離線暫存</span>' : '<span class="badge bg-success">已同步</span>'}</div>
     </div>`;

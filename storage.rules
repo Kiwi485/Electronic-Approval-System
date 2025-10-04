@@ -1,13 +1,17 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      // allow reads only for authenticated users
-      allow read: if request.auth != null;
-
-      // allow writes only for authenticated users and limit file size to 10MB
+    // 簽章圖片：限制在 signatures/ 目錄
+    match /signatures/{fileName} {
+      allow read: if request.auth != null; // 之後可再細化 (僅擁有者)
       allow write: if request.auth != null
-                   && request.resource.size < 10 * 1024 * 1024;
+                    && request.resource.size < 2 * 1024 * 1024 // 單張簽章上限 2MB
+                    && request.resource.contentType.matches('image/.*');
+    }
+
+    // 其他舊路徑維持原有保守存取（僅讀）或再視需求放寬
+    match /{allPaths=**} {
+      allow read: if request.auth != null;
     }
   }
 }
