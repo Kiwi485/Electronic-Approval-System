@@ -7,8 +7,26 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
   <link href="styles/common.css" rel="stylesheet">
+  <style>html{visibility:hidden;}</style>
 </head>
 <body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="index.html"><i class="bi bi-clipboard-check me-2"></i>智慧簽單系統</a>
+      <div class="dropdown">
+        <button class="btn btn-primary d-flex align-items-center" type="button" data-bs-toggle="dropdown">
+          <i class="bi bi-person-circle me-2"></i>
+          <span class="d-none d-md-inline" id="currentUserEmail">—</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+          <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+          <li><hr class="dropdown-divider" /></li>
+          <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
   <div class="container-fluid">
     <div class="row">
       <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
@@ -48,7 +66,7 @@
                     <th style="width:15%">客戶名稱</th>
                     <th style="width:20%">地點</th>
                     <th style="width:10%">金額</th>
-                    <th style="width:15%">工時</th>
+                    <th style="width:15%">狀態</th>
                     <th style="width:8%">操作</th>
                   </tr>
                 </thead>
@@ -69,6 +87,7 @@
   <!-- 離線管理 & 歷史頁面腳本 -->
   <script type="module" src="js/offline.js"></script>
   <script type="module" src="js/history.js"></script>
+  <script type="module" src="js/auth-guard.js"></script>
 
   <!-- 詳情 Modal -->
   <div class="modal fade" id="detailModal" tabindex="-1">
