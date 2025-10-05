@@ -1,6 +1,6 @@
 // offline.js - 離線資料管理與自動同步
 // 提供 window.offlineManager 供其他模組使用
-import { db } from '../firebase-init.js';
+import { db } from './firebase-init.js';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 
 class OfflineManager {

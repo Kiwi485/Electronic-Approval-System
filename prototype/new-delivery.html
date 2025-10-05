@@ -13,16 +13,41 @@
         <div class="row">
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">新增簽單</h1>
+                    <h1 class="h2 mb-0">新增簽單</h1>
+                </div>
+
+                <div id="welcomeBanner" class="alert alert-info d-flex justify-content-between align-items-center d-none" role="status">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-person-circle me-3" style="font-size: 1.6rem;"></i>
+                        <div>
+                            <div class="fw-bold" data-user-name>使用者</div>
+                            <div class="small text-muted" data-user-email>user@example.com</div>
+                        </div>
+                    </div>
+                    <button id="logoutButton" type="button" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-box-arrow-right me-1"></i>登出
+                    </button>
                 </div>
 
                 <div class="card">
                     <div class="card-body">
-                        <form class="row g-3" id="deliveryForm">
+                        <form class="row g-3" id="deliveryForm" novalidate>
+                            <div class="col-md-6">
+                                <label class="form-label">司機姓名</label>
+                                <input type="text" class="form-control" id="driverName" name="driverName" placeholder="請先登入" readonly>
+                                <div class="form-text">登入後會自動填入司機姓名。</div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">車號</label>
+                                <input type="text" class="form-control" id="vehicleNumber" name="vehicleNumber" placeholder="請先登入" readonly>
+                                <div class="form-text">登入後會自動填入預設車號。</div>
+                            </div>
+
                             <!-- 基本資訊 -->
                             <div class="col-md-6">
                                 <label class="form-label">客戶名稱</label>
-                                <input type="text" class="form-control" list="customerList" name="customer">
+                                <input type="text" class="form-control" list="customerList" name="customer" required placeholder="請輸入或選擇客戶">
                                 <datalist id="customerList">
                                     <option value="台北營造公司">
                                     <option value="新北工程行">
@@ -32,27 +57,66 @@
 
                             <div class="col-md-6">
                                 <label class="form-label">日期</label>
-                                <input type="date" class="form-control" name="date">
+                                <input type="date" class="form-control" name="date" required>
                             </div>
 
                             <div class="col-12">
                                 <label class="form-label">施工地點</label>
-                                <input type="text" class="form-control" name="location" placeholder="輸入地址">
+                                <input type="text" class="form-control" name="location" placeholder="輸入地址" required>
                             </div>
 
                             <div class="col-md-12">
                                 <label class="form-label">作業狀況</label>
-                                <textarea class="form-control" rows="3" name="work"></textarea>
+                                <textarea class="form-control" rows="3" name="work" placeholder="請描述此次作業內容" required></textarea>
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label">工作時間 (起)</label>
-                                <input type="time" class="form-control" name="startTime">
+                                <div class="input-group">
+                                    <button type="button" class="btn btn-outline-secondary" data-time-adjust="start:-15">
+                                        <i class="bi bi-dash-circle"></i> -15分
+                                    </button>
+                                    <input type="time" class="form-control" name="startTime" required>
+                                    <button type="button" class="btn btn-outline-secondary" data-time-adjust="start:15">
+                                        <i class="bi bi-plus-circle"></i> +15分
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" data-time-fill="start">
+                                        <i class="bi bi-clock"></i> 現在
+                                    </button>
+                                </div>
+                                <div class="form-text">支援一鍵填入目前時間。</div>
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label">工作時間 (迄)</label>
-                                <input type="time" class="form-control" name="endTime">
+                                <div class="input-group">
+                                    <button type="button" class="btn btn-outline-secondary" data-time-adjust="end:-15">
+                                        <i class="bi bi-dash-circle"></i> -15分
+                                    </button>
+                                    <input type="time" class="form-control" name="endTime" required>
+                                    <button type="button" class="btn btn-outline-secondary" data-time-adjust="end:15">
+                                        <i class="bi bi-plus-circle"></i> +15分
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" data-time-fill="end">
+                                        <i class="bi bi-clock-history"></i> 現在
+                                    </button>
+                                </div>
+                                <div class="form-text">跨日作業請在結束時間後由系統自動計算總工時。</div>
+                            </div>
+
+                            <div class="col-md-6 col-lg-4">
+                                <label class="form-label">金額 (NT$)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">NT$</span>
+                                    <input type="number" class="form-control" id="amount" name="amount" min="0" step="0.5" inputmode="decimal" placeholder="例如 3500" required>
+                                </div>
+                                <div class="form-text">請輸入此次服務費用，可填整數或小數。</div>
+                            </div>
+
+                            <div class="col-md-6 col-lg-4">
+                                <label class="form-label">總工時 (小時)</label>
+                                <input type="number" class="form-control" id="totalHours" name="totalHours" placeholder="自動計算或自行輸入" min="0" step="0.1" inputmode="decimal">
+                                <div class="form-text">系統會依時間自動計算，也可自行調整（單位小時，精度 0.1）。</div>
                             </div>
 
                             <!-- 送出按鈕 -->
@@ -78,53 +142,9 @@
     
     
 
-        <!-- 離線管理與新增簽單腳本 -->
-        <script type="module" src="js/offline.js"></script>
-        <script type="module" src="js/new-delivery.js"></script>
-        <script type="module">
-            import { onAuthChange, signOut } from './js/auth.js';
-
-            onAuthChange((user) => {
-                const driverElId = 'driverName';
-                const vehicleElId = 'vehicleNumber';
-                let driverEl = document.getElementById(driverElId);
-                let vehicleEl = document.getElementById(vehicleElId);
-                if (!driverEl) {
-                    // append fields if missing
-                    const container = document.querySelector('.card-body form .row') || document.querySelector('.card-body form');
-                    const div1 = document.createElement('div');
-                    div1.className = 'col-md-6';
-                    div1.innerHTML = '<label class="form-label">車號</label><input id="vehicleNumber" type="text" class="form-control" readonly placeholder="請先登入以自動帶入車號">';
-                    const div2 = document.createElement('div');
-                    div2.className = 'col-md-6';
-                    div2.innerHTML = '<label class="form-label">司機姓名</label><input id="driverName" type="text" class="form-control" readonly placeholder="請先登入以自動帶入司機名稱">';
-                    container.insertBefore(div1, container.firstChild);
-                    container.insertBefore(div2, container.firstChild.nextSibling);
-                    driverEl = document.getElementById(driverElId);
-                    vehicleEl = document.getElementById(vehicleElId);
-                }
-
-                const badge = document.getElementById('authBadge');
-                badge.innerHTML = '';
-                if (user) {
-                    const name = user.displayName || user.email.split('@')[0];
-                    if (driverEl) driverEl.value = name;
-                    if (vehicleEl) vehicleEl.value = 'V001';
-                    badge.innerHTML = `<div class="position-fixed top-0 end-0 m-3"><div class="btn-group"><button class="btn btn-sm btn-outline-primary">歡迎，${name}</button><button id="btnSignOut" class="btn btn-sm btn-outline-danger">登出</button></div></div>`;
-                    document.getElementById('btnSignOut').addEventListener('click', async () => {
-                        await signOut();
-                        if (driverEl) driverEl.value = '';
-                        if (vehicleEl) vehicleEl.value = '';
-                        window.location.href = './login.html';
-                    });
-                } else {
-                    // redirect to login and remember returnTo
-                    const params = new URLSearchParams();
-                    params.set('returnTo', window.location.pathname.split('/').pop());
-                    window.location.href = `./login.html?${params.toString()}`;
-                }
-            });
-        </script>
+    <!-- 離線管理與新增簽單腳本 -->
+    <script type="module" src="js/offline.js"></script>
+    <script type="module" src="js/new-delivery.js"></script>
 
 
 </body>

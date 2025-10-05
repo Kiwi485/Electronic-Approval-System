@@ -1,5 +1,5 @@
 // history.js - 讀取簽單歷史 + 搜尋 + 分頁 + 詳情 (含離線未同步資料顯示)
-import { db } from '../firebase-init.js';
+import { db } from './firebase-init.js';
 import { collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { offlineManager } from './offline.js';
 

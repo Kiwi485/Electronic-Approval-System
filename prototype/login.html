@@ -1,70 +1,133 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>登入 - 智慧簽單系統</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
-  <link href="styles/common.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧簽單系統 - 使用者登入</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="styles/common.css" rel="stylesheet">
 </head>
-<body class="d-flex align-items-center" style="min-height:100vh;">
-  <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-md-5">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h4 class="card-title mb-3">登入</h4>
-            <div id="loginAlert" class="alert d-none" role="alert"></div>
-            <form id="loginForm">
-              <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input id="email" type="email" class="form-control" required placeholder="dev@example.com">
-              </div>
-              <div class="mb-3">
-                <label class="form-label">密碼</label>
-                <input id="password" type="password" class="form-control" required placeholder="輸入密碼">
-              </div>
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <small class="text-muted">測試帳號: dev@example.com / 123456</small>
-                <button id="btnSubmit" class="btn btn-primary">登入</button>
-              </div>
+<body class="bg-light d-flex align-items-center justify-content-center" style="min-height: 100vh;">
+    <div class="card shadow-sm" style="max-width: 420px; width: 100%;">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <i class="bi bi-clipboard-check text-primary" style="font-size: 3rem;"></i>
+                <h1 class="h4 mt-3">智慧簽單系統</h1>
+                <p class="text-muted">請使用公司提供的登入帳號</p>
+            </div>
+
+            <div id="loginSuccess" class="alert alert-success d-none" role="alert">
+                <i class="bi bi-check-circle me-2"></i>
+                <span id="successMessage">登入成功，準備導向中...</span>
+            </div>
+
+            <div id="loginError" class="alert alert-danger d-none" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <span id="errorMessage">登入失敗，請稍後再試。</span>
+            </div>
+
+            <form id="loginForm" class="needs-validation" novalidate>
+                <div class="mb-3">
+                    <label for="email" class="form-label">公司 Email</label>
+                    <input type="email" class="form-control" id="email" name="email" placeholder="dev@example.com" required>
+                    <div class="invalid-feedback">請輸入有效的 Email。</div>
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">密碼</label>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="請輸入密碼" required>
+                    <div class="invalid-feedback">請輸入密碼。</div>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary" id="loginButton">
+                        <span class="default-text"><i class="bi bi-box-arrow-in-right me-2"></i>登入</span>
+                        <span class="loading-text d-none"><span class="spinner-border spinner-border-sm me-2"></span>登入中...</span>
+                    </button>
+                </div>
             </form>
-          </div>
+
+            <div class="mt-4 small text-muted">
+                <p class="mb-1"><strong>測試帳號</strong></p>
+                <p class="mb-0">Email：dev@example.com<br>密碼：123456</p>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 
-  <script type="module">
-    import { signIn } from './js/auth.js';
+    <script type="module">
+        import { signIn, subscribeAuth, consumeRedirect, translateAuthError, signOutUser } from './js/auth.js';
 
-    const params = new URLSearchParams(window.location.search);
-    const returnTo = params.get('returnTo') || 'new-delivery.html';
+        try {
+            await signOutUser({ redirectToLogin: false });
+        } catch (error) {
+            console.warn('[Login] 前置登出失敗，將繼續顯示登入頁。', error);
+        }
 
-    const form = document.getElementById('loginForm');
-    const alertEl = document.getElementById('loginAlert');
+        const form = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginButton = document.getElementById('loginButton');
+        const defaultText = loginButton.querySelector('.default-text');
+        const loadingText = loginButton.querySelector('.loading-text');
+        const successAlert = document.getElementById('loginSuccess');
+        const successMessage = document.getElementById('successMessage');
+        const errorAlert = document.getElementById('loginError');
+        const errorMessage = document.getElementById('errorMessage');
 
-    function showAlert(message, type = 'danger'){
-      alertEl.className = 'alert alert-' + type;
-      alertEl.textContent = message;
-      alertEl.classList.remove('d-none');
-    }
+        let redirectHandled = false;
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value.trim();
-      try {
-        const user = await signIn(email, password);
-        showAlert(`歡迎，${user.displayName || user.email.split('@')[0]}！`, 'success');
-        setTimeout(() => { window.location.href = returnTo; }, 700);
-      } catch (err) {
-        showAlert(err.message || '登入失敗');
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorAlert.classList.remove('d-none');
+        }
+
+        function clearError() {
+            errorAlert.classList.add('d-none');
+        }
+
+        function showSuccess(message) {
+            successMessage.textContent = message;
+            successAlert.classList.remove('d-none');
+        }
+
+        function toggleLoading(on) {
+            loginButton.disabled = on;
+            defaultText.classList.toggle('d-none', on);
+            loadingText.classList.toggle('d-none', !on);
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            clearError();
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                return;
+            }
+
+            toggleLoading(true);
+            try {
+                await signIn(emailInput.value.trim(), passwordInput.value.trim());
+            } catch (error) {
+                showError(translateAuthError(error));
+                toggleLoading(false);
+            }
+        });
+
+    subscribeAuth((user, profile) => {
+      if (user && !redirectHandled) {
+        redirectHandled = true;
+        showSuccess(`歡迎回來，${profile?.name || user.email}！`);
+        toggleLoading(true);
+        form.classList.add('d-none');
+        const target = consumeRedirect('index.html');
+        setTimeout(() => {
+          window.location.replace(target);
+        }, 1200);
+      } else if (!user) {
+        redirectHandled = false;
+        toggleLoading(false);
+        form.classList.remove('d-none');
       }
     });
   </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

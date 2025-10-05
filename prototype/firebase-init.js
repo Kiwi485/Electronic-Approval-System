@@ -1,4 +1,5 @@
 // prototype/firebase-init.js
+<<<<<<< HEAD
 // 使用 CDN ES module 版本（9.22.1），並匯出 db, auth, storage
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
@@ -31,3 +32,10 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 
 export { app, analytics, db, auth, storage };
+=======
+// prototype/firebase-init.js (legacy re-export)
+// 仍然保留這個入口以確保舊版 HTML 可以正常運作。
+// 建議改用 `./js/firebase-init.js`。
+
+export { app, db, auth, storage, usingEmulators } from './js/firebase-init.js';
+>>>>>>> 8116f3c (新增登入頁面、簽單內容)
