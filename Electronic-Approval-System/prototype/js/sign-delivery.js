@@ -7,6 +7,7 @@ import { storage } from '../firebase-init.js';
 // 供離線使用的 key（最小變更：不依賴 offline.js API，直接讀 localStorage）
 const OFFLINE_NOTES_KEY = 'offline_delivery_notes';
 const SIG_QUEUE_KEY = 'offline_signatures_queue';
+const PENDING_CACHE_KEY = 'cached_pending_sign_docs';
 
 // 新列表元素
 const pendingListEl = document.getElementById('pendingList');
@@ -14,7 +15,6 @@ const pendingLoadingEl = document.getElementById('pendingLoading');
 const noPendingEl = document.getElementById('noPending');
 const reloadListBtn = document.getElementById('reloadList');
 const selectHintEl = document.getElementById('selectHint');
-const netStatusAlert = document.getElementById('netStatusAlert');
 
 // 舊錯誤（輸入模式）改為通用錯誤 (保留引用安全)
 const loadError = document.getElementById('loadError');
@@ -60,6 +60,17 @@ async function loadNote(id) {
   currentDocId = null;
   noteSection.classList.add('d-none');
   try {
+    // 離線時直接用快取
+    if (!navigator.onLine) {
+      const cached = loadPendingCache();
+      const data = cached.find(x => x.id === id);
+      if (data) {
+        currentDocId = id; // 保留 id 以利回線後處理
+        renderNote(data);
+        return;
+      }
+      throw new Error('離線狀態且找不到快取資料');
+    }
     const ref = doc(db, 'deliveryNotes', id);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
@@ -77,9 +88,17 @@ async function loadNote(id) {
   } catch (e) {
     console.error(e);
     logDebug('loadNote error', { message: e.message, code: e.code });
-    if (loadError) {
-      loadError.textContent = '載入失敗：' + e.message;
-      loadError.classList.remove('d-none');
+    // 嘗試使用快取
+    const cached = loadPendingCache();
+    const data = cached.find(x => x.id === id);
+    if (data) {
+      currentDocId = id;
+      renderNote(data);
+    } else {
+      if (loadError) {
+        loadError.textContent = '載入失敗：' + e.message;
+        loadError.classList.remove('d-none');
+      }
     }
   }
 }
@@ -92,7 +111,6 @@ async function loadPendingList() {
   pendingListEl.innerHTML = '';
   // 先注入離線待簽項目（黃色）
   const offlineList = getOfflinePendingNotes();
-  logDebug('offline pending count', { count: offlineList.length });
   let offlineCount = 0;
   try {
     offlineList.forEach(item => {
@@ -143,6 +161,26 @@ async function loadPendingList() {
     const items = [];
     snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
     logDebug('pending count', { count: items.length });
+    // 線上成功後快取最小必要欄位（其實包含細節以便離線顯示）
+    try {
+      const min = items.map(x => ({
+        id: x.id,
+        customer: x.customer || null,
+        location: x.location || null,
+        date: x.date || null,
+        createdAt: x.createdAt || null,
+        work: x.work || null,
+        startTime: x.startTime || null,
+        endTime: x.endTime || null,
+        amount: x.amount || null,
+        machine: x.machine || null,
+        vehicleNumber: x.vehicleNumber || null,
+        driverName: x.driverName || null,
+        remark: x.remark || null,
+        signatureStatus: x.signatureStatus || 'pending'
+      }));
+      localStorage.setItem(PENDING_CACHE_KEY, JSON.stringify(min));
+    } catch {}
     if (items.length === 0 && offlineCount === 0) {
       noPendingEl.classList.remove('d-none');
     }
@@ -165,8 +203,28 @@ async function loadPendingList() {
   } catch (e) {
     console.error(e);
     logDebug('loadPendingList error', { message: e.message, code: e.code });
-    if (offlineCount === 0) {
-      pendingListEl.innerHTML = `<li class="list-group-item text-danger">載入失敗：${e.message}</li>`;
+    // 改為使用快取渲染
+    const cached = loadPendingCache();
+    if (cached.length) {
+      cached.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        const date = (item.date || item.createdAt || '').toString().split('T')[0];
+        li.innerHTML = `<div>
+            <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} <span class="badge bg-secondary ms-1">快取</span></div>
+            <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
+        li.addEventListener('click', (e) => {
+          const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id;
+          selectPending(targetId);
+        });
+        pendingListEl.appendChild(li);
+      });
+    } else {
+      if (offlineCount === 0) {
+        pendingListEl.innerHTML = `<li class="list-group-item text-danger">載入失敗：${e.message}</li>`;
+      }
     }
   } finally {
     clearTimeout(to);
@@ -372,10 +430,6 @@ reloadListBtn?.addEventListener('click', () => loadPendingList());
 
 document.addEventListener('DOMContentLoaded', () => {
   loadPendingList();
-  // 顯示當前網路狀態
-  if (netStatusAlert) netStatusAlert.classList.toggle('d-none', navigator.onLine);
-  window.addEventListener('online', () => netStatusAlert && netStatusAlert.classList.add('d-none'));
-  window.addEventListener('offline', () => netStatusAlert && netStatusAlert.classList.remove('d-none'));
   // URL 若帶 id 仍可直接載入（例如分享連結）
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
@@ -383,29 +437,23 @@ document.addEventListener('DOMContentLoaded', () => {
   logDebug('DOMContentLoaded done');
 });
 
-// 當離線資料數量更新時（例如在新增簽單頁新增了一筆），即時刷新左側清單
-window.addEventListener('offline-count-changed', () => {
-  logDebug('offline-count-changed event received, reload list');
-  loadPendingList();
-});
-
-// 跨分頁更新：當其他分頁寫入 offline_delivery_notes 時，這裡收到 storage 事件後自動刷新
-window.addEventListener('storage', (e) => {
-  if (e.key === OFFLINE_NOTES_KEY) {
-    logDebug('storage event: offline notes changed, reload list');
-    loadPendingList();
-  }
-});
-
 function getOfflinePendingNotes() {
   try {
     const list = JSON.parse(localStorage.getItem(OFFLINE_NOTES_KEY) || '[]');
-    // 依建立時間排序（新到舊）
-    const pending = list.filter(x => (x.signatureStatus || 'pending') === 'pending');
-    pending.sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
-    return pending;
+    return list.filter(x => (x.signatureStatus || 'pending') === 'pending');
   } catch { return []; }
 }
+
+function loadPendingCache() {
+  try { return JSON.parse(localStorage.getItem(PENDING_CACHE_KEY) || '[]'); } catch { return []; }
+}
+
+// 事件驅動：離線筆數有變動時，立即刷新清單（<= 1 秒）
+function injectLatestOffline() {
+  // 為保持邏輯一致與簡單，直接重用現有渲染流程
+  loadPendingList();
+}
+window.addEventListener('offline-count-changed', injectLatestOffline);
 
 function loadOfflineNote(localId) {
   logDebug('loadOfflineNote start', { localId });

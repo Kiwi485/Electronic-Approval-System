@@ -1,7 +1,5 @@
-// new-delivery.js - 處理新增簽單 (含離線提交)
-import { db } from '../firebase-init.js';
+// new-delivery.js - 處理新增簽單：離線優先提交，線上再背景同步
 import { buildValidatedPayload } from './form-validation.js';
-import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { offlineManager } from './offline.js';
 
 console.log('🚀 new-delivery.js 已載入');
@@ -9,12 +7,7 @@ console.log('🚀 new-delivery.js 已載入');
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
 
-async function submitOnline(data) {
-  const payload = { ...data, offline: false, serverCreatedAt: serverTimestamp() };
-  const docRef = await addDoc(collection(db, 'deliveryNotes'), payload);
-  console.log('✅ 上線新增成功 ID:', docRef.id);
-  return docRef.id;
-}
+// 不再直接呼叫 Firestore；統一交由 offlineManager 在連線時自動同步
 
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -44,18 +37,14 @@ form?.addEventListener('submit', async (e) => {
     submitBtn.innerHTML = originalText;
   };
 
-  if (!navigator.onLine) {
-    offlineManager.saveOfflineData(data);
-    finish(true, '目前離線，已暫存並將於連線後自動上傳。');
-    return;
+  // 離線優先：一律先暫存到本機，確保不丟單
+  offlineManager.saveOfflineData(data);
+  // 若目前在線，背景觸發同步（失敗也不影響 UI）
+  if (navigator.onLine) {
+    setTimeout(() => offlineManager.syncOfflineData(), 0);
   }
-
-  try {
-    await submitOnline(data);
-    finish(true, '完成簽單成功！');
-  } catch (error) {
-    console.warn('線上提交失敗，改為離線暫存', error);
-    offlineManager.saveOfflineData(data);
-    finish(false, '網路/伺服器問題，資料已暫存離線稍後同步。');
-  }
+  finish(true, navigator.onLine
+    ? '已儲存並背景同步中（若失敗將稍後自動重試）。'
+    : '目前離線，已暫存並將於連線後自動上傳。'
+  );
 });
