@@ -1,7 +1,7 @@
 // offline.js - 離線資料管理與自動同步
 // 提供 window.offlineManager 供其他模組使用
 import { db } from '../firebase-init.js';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, limit, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 
 class OfflineManager {
   constructor() {
@@ -79,37 +79,10 @@ class OfflineManager {
           continue;
         }
         const payload = { ...note, offline: false, serverCreatedAt: serverTimestamp() };
-        const addedRef = await addDoc(collection(db, 'deliveryNotes'), payload);
-        console.log('[Offline] 同步成功 localId=', note.localId, ' => docId=', addedRef.id);
+        await addDoc(collection(db, 'deliveryNotes'), payload);
+        console.log('[Offline] 同步成功 localId=', note.localId);
         this._removeByLocalId(note.localId);
         this.markUploaded(note.localId);
-
-        // 嘗試套用對應 localId 的離線簽章 (localOnly entries)
-        try {
-          const SIG_KEY = 'offline_signatures_queue';
-          const list = JSON.parse(localStorage.getItem(SIG_KEY) || '[]');
-          const related = list.filter(s => (s.localOnly && s.localId === note.localId) || (!s.docId && s.localId === note.localId));
-          if (related.length) {
-            console.log('[Offline] 發現離線簽章待套用 localId=', note.localId, ' count=', related.length);
-            for (const sigItem of related) {
-              try {
-                await updateDoc(doc(db, 'deliveryNotes', addedRef.id), {
-                  signatureDataUrl: sigItem.dataUrl,
-                  signedAt: serverTimestamp(),
-                  signatureStatus: 'completed'
-                });
-                // 移除該簽章項目
-                const remain = list.filter(x => x.id !== sigItem.id);
-                localStorage.setItem(SIG_KEY, JSON.stringify(remain));
-                console.log('[Offline] 已套用離線簽章到 docId=', addedRef.id);
-              } catch (sigErr) {
-                console.warn('[Offline] 套用離線簽章失敗 docId=', addedRef.id, sigErr);
-              }
-            }
-          }
-        } catch (sigQueueErr) {
-          console.warn('[Offline] 檢查離線簽章佇列錯誤 localId=', note.localId, sigQueueErr);
-        }
       } catch (error) {
         console.error('[Offline] 同步失敗 localId=', note.localId, error);
         // 中斷，稍後重新再試，以避免快速重試

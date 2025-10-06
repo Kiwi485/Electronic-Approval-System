@@ -1,8 +1,7 @@
 // sign-delivery.js - 單獨簽章頁面
 import { db } from '../firebase-init.js';
+import { offlineManager } from './offline.js';
 import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
-import { storage } from '../firebase-init.js';
 
 // 新列表元素
 const pendingListEl = document.getElementById('pendingList');
@@ -25,6 +24,39 @@ const signatureImg = document.getElementById('signatureImg');
 const signedAtText = document.getElementById('signedAtText');
 const redoSignature = document.getElementById('redoSignature');
 const debugLogEl = document.getElementById('debugLog');
+const netStatusAlert = document.getElementById('netStatusAlert');
+
+// 離線簽章佇列 key
+const OFFLINE_SIGNATURE_KEY = 'offline_signatures_queue';
+const PENDING_CACHE_KEY = 'cached_pending_sign_docs';
+
+function readOfflineQueue() {
+  try { return JSON.parse(localStorage.getItem(OFFLINE_SIGNATURE_KEY)||'[]'); } catch { return []; }
+}
+function writeOfflineQueue(arr) { localStorage.setItem(OFFLINE_SIGNATURE_KEY, JSON.stringify(arr)); }
+async function syncOfflineSignatures() {
+  const list = readOfflineQueue();
+  if (!navigator.onLine || list.length === 0) return;
+  logDebug('try sync offline signatures', { count: list.length });
+  for (const item of list) {
+    try {
+      await updateDoc(doc(db, 'deliveryNotes', item.docId), {
+        signatureDataUrl: item.dataUrl,
+        signedAt: serverTimestamp(),
+        signatureStatus: 'completed'
+      });
+      logDebug('offline signature synced', { docId: item.docId });
+      // 移除成功項目
+      const remain = readOfflineQueue().filter(x => x.id !== item.id);
+      writeOfflineQueue(remain);
+    } catch (e) {
+      logDebug('offline signature sync failed', { docId: item.docId, error: e.message });
+      // 若失敗保留，稍後再試
+    }
+  }
+  // 若有目前載入的文件剛好被同步，更新畫面
+  if (currentDocId) loadNote(currentDocId);
+}
 
 let currentDocId = null;
 let hasSignature = false;
@@ -53,6 +85,14 @@ async function loadNote(id) {
   if (loadError) loadError.classList.add('d-none');
   currentDocId = null;
   noteSection.classList.add('d-none');
+  // 先檢查是否為本地離線 localId
+  const offlineMatch = offlineManager.getOfflineData().find(n => n.localId === id);
+  if (offlineMatch) {
+    logDebug('load offline local note', { localId: id });
+    // 離線筆尚未有真正 doc id，因此簽章時需阻擋或暫存
+    renderNote({ ...offlineMatch, _isLocalOnly: true });
+    return;
+  }
   try {
     const ref = doc(db, 'deliveryNotes', id);
     const snap = await getDoc(ref);
@@ -90,6 +130,23 @@ async function loadPendingList() {
     logDebug('pendingList timeout fallback triggered (5s)');
     pendingLoadingEl.innerHTML = '<span class="text-warning small">載入逾時，嘗試較簡單查詢...</span>';
   }, 5000);
+  // 若離線，直接用快取 + 離線本地簽單
+  if (!navigator.onLine) {
+    logDebug('offline pending list using cache');
+    const cache = (()=>{try{return JSON.parse(localStorage.getItem(PENDING_CACHE_KEY)||'[]')}catch{return []}})();
+    const offlineNotes = (window.offlineManager?.getOfflineData()||[]).filter(n=> (n.signatureStatus||'pending')==='pending');
+    const mergedMap = new Map();
+    [...cache, ...offlineNotes].forEach(item=>{
+      const key = item.id || item.localId || item.docId || item.tempId || item.createdAt;
+      if(!mergedMap.has(key)) mergedMap.set(key,item);
+    });
+    const items = [...mergedMap.values()];
+    if (items.length===0) noPendingEl.classList.remove('d-none');
+    else renderPendingItems(items, { fromCache: true });
+    pendingLoadingEl.style.display='none';
+    pendingListEl.style.display='block';
+    return;
+  }
   try {
     // 取最新 100 筆待簽章 (可調整)
     const q = query(
@@ -114,26 +171,13 @@ async function loadPendingList() {
     }
     const items = [];
     snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    // 快取線上結果（僅基本欄位）
+    try { localStorage.setItem(PENDING_CACHE_KEY, JSON.stringify(items.slice(0,100))); } catch {}
     logDebug('pending count', { count: items.length });
     if (items.length === 0) {
       noPendingEl.classList.remove('d-none');
     } else {
-      items.forEach(item => {
-        const li = document.createElement('li');
-        li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-        const date = (item.date || item.createdAt || '').toString().split('T')[0];
-        li.innerHTML = `<div>
-            <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
-            <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
-          </div>
-          <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
-        li.addEventListener('click', (e) => {
-          // 若點到內部按鈕也一樣載入
-          const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id;
-          selectPending(targetId);
-        });
-        pendingListEl.appendChild(li);
-      });
+      renderPendingItems(items, { fromCache: false });
     }
   } catch (e) {
     console.error(e);
@@ -147,6 +191,27 @@ async function loadPendingList() {
   }
 }
 
+function renderPendingItems(items, { fromCache }) {
+  items.forEach(item => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+    const date = (item.date || item.createdAt || '').toString().split('T')[0];
+    const badges = [];
+    if (fromCache) badges.push('<span class="badge bg-secondary ms-1">快取</span>');
+    if (item.offline) badges.push('<span class="badge bg-warning text-dark ms-1">離線</span>');
+    li.innerHTML = `<div>
+        <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} ${badges.join('')}</div>
+        <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
+      </div>
+      <button class="btn btn-sm btn-outline-primary" data-id="${item.id || item.localId}"><i class="bi bi-pencil-square"></i></button>`;
+    li.addEventListener('click', (e) => {
+      const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id || item.localId;
+      selectPending(targetId);
+    });
+    pendingListEl.appendChild(li);
+  });
+}
+
 function selectPending(id) {
   selectHintEl?.classList.add('d-none');
   loadNote(id);
@@ -155,7 +220,9 @@ function selectPending(id) {
 function renderNote(d) {
   noteSection.classList.remove('d-none');
   const date = (d.date || d.createdAt || '').toString().split('T')[0];
+  const localWarn = d._isLocalOnly ? '<div class="alert alert-warning py-1 px-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i> 此簽單尚未上傳，需上線後才能正式存入並附加簽章。</div>' : '';
   noteBody.innerHTML = `
+    ${localWarn}
     <div class="row g-2 small">
       <div class="col-md-4"><strong>日期:</strong> ${date || '-'}</div>
       <div class="col-md-4"><strong>客戶:</strong> ${d.customer || '-'}</div>
@@ -170,7 +237,10 @@ function renderNote(d) {
     </div>`;
   setStatusBadge(d.signatureStatus || 'pending');
 
-  if (d.signatureStatus === 'completed' && d.signatureDataUrl) {
+  if (d._isLocalOnly) {
+    // 本地尚未上傳：允許先畫簽章，但需暫存於本地並等待該筆上傳後再補寫入
+    showSignaturePad();
+  } else if (d.signatureStatus === 'completed' && d.signatureDataUrl) {
     showSignedPreview(d.signatureDataUrl, d.signedAt);
   } else {
     showSignaturePad();
@@ -243,20 +313,6 @@ function initCanvas() {
   };
 }
 
-async function canvasToBlob(canvas) {
-  return await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
-}
-
-async function deleteOldSignature(docId, oldPath) {
-  if (!oldPath) return;
-  try {
-    await deleteObject(storageRef(storage, oldPath));
-    logDebug('old signature deleted', { oldPath });
-  } catch (e) {
-    logDebug('delete old signature failed', { message: e.message });
-  }
-}
-
 async function saveSignature() {
   if (!currentDocId) return;
   if (!hasSignature) {
@@ -267,26 +323,34 @@ async function saveSignature() {
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>儲存中';
   try {
-    // 先讀取目前文件（若已有舊簽章可刪除）
-    let prev; try { prev = (await getDoc(doc(db,'deliveryNotes', currentDocId))).data(); } catch {}
-    const blob = await canvasToBlob(signaturePadCanvas);
-    if (!blob) throw new Error('無法取得簽章影像');
-    const filePath = `signatures/${currentDocId}_${Date.now()}.png`;
-    const fileRef = storageRef(storage, filePath);
-    await uploadBytes(fileRef, blob, { contentType: 'image/png' });
-    const url = await getDownloadURL(fileRef);
-    await updateDoc(doc(db, 'deliveryNotes', currentDocId), {
-      signatureUrl: url,
-      signatureStoragePath: filePath,
-      signatureDataUrl: null, // 停用 base64
-      signedAt: serverTimestamp(),
-      signatureStatus: 'completed'
-    });
-    setStatusBadge('completed');
-    showSignedPreview(url, new Date().toISOString());
-    // 刪除舊檔（若有舊路徑且與新不同）
-    if (prev?.signatureStoragePath && prev.signatureStoragePath !== filePath) {
-      deleteOldSignature(currentDocId, prev.signatureStoragePath);
+    const dataUrl = signaturePadCanvas.toDataURL('image/png');
+    // 判斷目前顯示的是否為本地離線未上傳資料
+    const localOnly = !!noteBody.querySelector('.alert-warning');
+    if (localOnly) {
+      // 將簽章暫存在離線簽章陣列，需等該 localId 上傳成真正 doc 後再匹配補上
+      const localId = offlineManager.getOfflineData().find(n=> n.localId === currentDocId)?.localId || currentDocId;
+      const pendingLocal = readOfflineQueue();
+      pendingLocal.push({ id: crypto.randomUUID(), docId: null, localId, dataUrl, createdAt: Date.now(), localOnly: true });
+      writeOfflineQueue(pendingLocal);
+      alert('離線本地簽單：簽章已暫存。此筆上傳後會自動套用。');
+      setStatusBadge('pending');
+      showSignedPreview(dataUrl, new Date().toISOString());
+    } else if (!navigator.onLine) {
+      // 離線：推入佇列 (已有 docId)
+      const q = readOfflineQueue();
+      q.push({ id: crypto.randomUUID(), docId: currentDocId, dataUrl, createdAt: Date.now() });
+      writeOfflineQueue(q);
+      alert('離線中：簽章已暫存，重新上線會自動同步。');
+      setStatusBadge('pending');
+      showSignedPreview(dataUrl, new Date().toISOString());
+    } else {
+      await updateDoc(doc(db, 'deliveryNotes', currentDocId), {
+        signatureDataUrl: dataUrl,
+        signedAt: serverTimestamp(),
+        signatureStatus: 'completed'
+      });
+      setStatusBadge('completed');
+      showSignedPreview(dataUrl, new Date().toISOString());
     }
   } catch (e) {
     alert('儲存失敗：' + e.message);
@@ -301,12 +365,7 @@ redoSignature?.addEventListener('click', async () => {
   const confirmRedo = confirm('重新簽章會覆蓋原有簽章，確定？');
   if (!confirmRedo) return;
   try {
-    // 清除 firestore 欄位並刪除舊檔
-    let prev; try { prev = (await getDoc(doc(db,'deliveryNotes', currentDocId))).data(); } catch {}
-    if (prev?.signatureStoragePath) deleteOldSignature(currentDocId, prev.signatureStoragePath);
     await updateDoc(doc(db, 'deliveryNotes', currentDocId), {
-      signatureUrl: null,
-      signatureStoragePath: null,
       signatureDataUrl: null,
       signatureStatus: 'pending',
       signedAt: null
@@ -328,4 +387,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const id = params.get('id');
   if (id) selectPending(id);
   logDebug('DOMContentLoaded done');
+  // 初始網路狀態
+  if (!navigator.onLine) {
+    netStatusAlert?.classList.remove('d-none');
+  }
+  window.addEventListener('online', () => {
+    netStatusAlert?.classList.add('d-none');
+    syncOfflineSignatures();
+  });
+  window.addEventListener('offline', () => {
+    netStatusAlert?.classList.remove('d-none');
+  });
+  // 嘗試背景同步現有離線簽章
+  syncOfflineSignatures();
 });
