@@ -58,12 +58,9 @@
 - **離線測試**：關閉網路填表 → 開啟網路 → 確認同步  
 
 
-## 🚀 開發環境設定（已驗證可用）
-
 ### 前置條件
 - **Node.js 18+** → [下載](https://nodejs.org/)  
 - **Firebase CLI** → `npm i -g firebase-tools`  
-- **http-server** → `npm i -g http-server`  
 
 ### 快速啟動（PowerShell）
 ```powershell
@@ -147,7 +144,6 @@ npx http-server .\prototype -p 3000
 很好 👌 你想要給隊友一個清楚的交代，告訴他們 **現在發生了什麼**、**為什麼會看到 branchLiu**，以及 **他們接下來要怎麼做**。我幫你整理成一份可以直接貼給隊友的訊息（Markdown 格式），方便你放在 README 或群組。
 
 ---
-
 ## 📝 團隊分支說明
 
 ### 📌 發生了什麼
