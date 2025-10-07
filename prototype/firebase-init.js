@@ -23,12 +23,20 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 
 
-// 如果在本地 → 使用 emulator
-if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-  connectFirestoreEmulator(db, "localhost", 8080);
-  connectAuthEmulator(auth, "http://localhost:9099");
-  connectStorageEmulator(storage, "localhost", 9199);
-  console.log("✅ Connected to Firebase Emulators");
+// 如果在本地或啟用 emu=1 → 使用 Emulator
+try {
+  const params = new URLSearchParams(location.search || '');
+  const forceEmu = params.has('emu');
+  const host = location.hostname; // 例如：127.0.0.1、localhost、或區網/公網 IP（手機測試用）
+  const isLocalLike = host === 'localhost' || host === '127.0.0.1' || /^(\d+\.){3}\d+$/.test(host);
+  if (forceEmu || isLocalLike) {
+    connectFirestoreEmulator(db, host, 8080);
+    connectAuthEmulator(auth, `http://${host}:9099`);
+    connectStorageEmulator(storage, host, 9199);
+    console.log(`✅ Connected to Firebase Emulators at ${host} (fs:8080, auth:9099, storage:9199)`);
+  }
+} catch (e) {
+  console.warn('[firebase-init] emulator connect decision failed:', e);
 }
 
 
