@@ -3,6 +3,11 @@ import { db } from '../firebase-init.js';
 import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
 import { storage } from '../firebase-init.js';
+import { offlineManager } from './offline.js';
+
+// 供離線使用的 key（最小變更：直接讀寫 localStorage）
+const OFFLINE_NOTES_KEY = 'offline_delivery_notes';
+const SIG_QUEUE_KEY = 'offline_signatures_queue';
 
 // 新列表元素
 const pendingListEl = document.getElementById('pendingList');
@@ -26,12 +31,13 @@ const signedAtText = document.getElementById('signedAtText');
 const redoSignature = document.getElementById('redoSignature');
 const debugLogEl = document.getElementById('debugLog');
 
-let currentDocId = null;
+let currentDocId = null;        // 線上文件 id
+let currentLocalId = null;      // 離線暫存 id
 let hasSignature = false;
 let ctx;
 
 function logDebug(msg, data) {
-  const ts = new Date().toISOString().split('T')[1].replace('Z','');
+  const ts = new Date().toISOString().split('T')[1]?.replace('Z','') || '';
   if (debugLogEl) {
     debugLogEl.textContent += `[#${ts}] ${msg}` + (data ? ` => ${JSON.stringify(data)}` : '') + "\n";
   }
@@ -84,6 +90,9 @@ async function loadPendingList() {
   pendingLoadingEl.style.display = 'block';
   noPendingEl.classList.add('d-none');
   pendingListEl.innerHTML = '';
+
+  // 先把離線待簽項目插到清單頂端（黃色），確保離線也能立刻看到
+  try { injectLatestOffline(); } catch (e) { logDebug('injectLatestOffline on load failed', { message: e.message }); }
   let timeoutHit = false;
   const to = setTimeout(() => {
     timeoutHit = true;
@@ -115,7 +124,7 @@ async function loadPendingList() {
     const items = [];
     snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
     logDebug('pending count', { count: items.length });
-    if (items.length === 0) {
+    if (items.length === 0 && pendingListEl.children.length === 0) {
       noPendingEl.classList.remove('d-none');
     } else {
       items.forEach(item => {
@@ -170,8 +179,9 @@ function renderNote(d) {
     </div>`;
   setStatusBadge(d.signatureStatus || 'pending');
 
-  if (d.signatureStatus === 'completed' && d.signatureDataUrl) {
-    showSignedPreview(d.signatureDataUrl, d.signedAt);
+  const imgSrc = d.signatureUrl || d.signatureDataUrl;
+  if (d.signatureStatus === 'completed' && imgSrc) {
+    showSignedPreview(imgSrc, d.signedAt);
   } else {
     showSignaturePad();
   }
@@ -258,7 +268,7 @@ async function deleteOldSignature(docId, oldPath) {
 }
 
 async function saveSignature() {
-  if (!currentDocId) return;
+  if (!currentDocId && !currentLocalId) return;
   if (!hasSignature) {
     signatureError.classList.remove('d-none');
     return;
@@ -267,26 +277,41 @@ async function saveSignature() {
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>儲存中';
   try {
-    // 先讀取目前文件（若已有舊簽章可刪除）
-    let prev; try { prev = (await getDoc(doc(db,'deliveryNotes', currentDocId))).data(); } catch {}
-    const blob = await canvasToBlob(signaturePadCanvas);
-    if (!blob) throw new Error('無法取得簽章影像');
-    const filePath = `signatures/${currentDocId}_${Date.now()}.png`;
-    const fileRef = storageRef(storage, filePath);
-    await uploadBytes(fileRef, blob, { contentType: 'image/png' });
-    const url = await getDownloadURL(fileRef);
-    await updateDoc(doc(db, 'deliveryNotes', currentDocId), {
-      signatureUrl: url,
-      signatureStoragePath: filePath,
-      signatureDataUrl: null, // 停用 base64
-      signedAt: serverTimestamp(),
-      signatureStatus: 'completed'
-    });
-    setStatusBadge('completed');
-    showSignedPreview(url, new Date().toISOString());
-    // 刪除舊檔（若有舊路徑且與新不同）
-    if (prev?.signatureStoragePath && prev.signatureStoragePath !== filePath) {
-      deleteOldSignature(currentDocId, prev.signatureStoragePath);
+    if (currentDocId && navigator.onLine) {
+      // 線上：上傳至 Storage 並更新文件
+      let prev; try { prev = (await getDoc(doc(db,'deliveryNotes', currentDocId))).data(); } catch {}
+      const blob = await canvasToBlob(signaturePadCanvas);
+      if (!blob) throw new Error('無法取得簽章影像');
+      const filePath = `signatures/${currentDocId}_${Date.now()}.png`;
+      const fileRef = storageRef(storage, filePath);
+      await uploadBytes(fileRef, blob, { contentType: 'image/png' });
+      const url = await getDownloadURL(fileRef);
+      await updateDoc(doc(db, 'deliveryNotes', currentDocId), {
+        signatureUrl: url,
+        signatureStoragePath: filePath,
+        signatureDataUrl: null,
+        signedAt: serverTimestamp(),
+        signatureStatus: 'completed'
+      });
+      setStatusBadge('completed');
+      showSignedPreview(url, new Date().toISOString());
+      if (prev?.signatureStoragePath && prev.signatureStoragePath !== filePath) {
+        deleteOldSignature(currentDocId, prev.signatureStoragePath);
+      }
+    } else {
+      // 離線：將 DataURL 暫存至離線簽單並加入簽章佇列
+      const dataUrl = signaturePadCanvas.toDataURL('image/png');
+      updateOfflineNoteSignature(currentLocalId, dataUrl);
+      enqueueOfflineSignature({
+        id: (crypto?.randomUUID?.() || (Date.now()+"_"+Math.random().toString(36).slice(2))),
+        docId: null,
+        localId: currentLocalId,
+        localOnly: true,
+        dataUrl,
+        createdAt: new Date().toISOString(),
+      });
+      setStatusBadge('completed');
+      showSignedPreview(dataUrl, new Date().toISOString());
     }
   } catch (e) {
     alert('儲存失敗：' + e.message);
@@ -328,4 +353,130 @@ document.addEventListener('DOMContentLoaded', () => {
   const id = params.get('id');
   if (id) selectPending(id);
   logDebug('DOMContentLoaded done');
+});
+
+// 取得離線待簽清單（signatureStatus==pending）
+function getOfflinePendingNotes() {
+  try {
+    const list = JSON.parse(localStorage.getItem(OFFLINE_NOTES_KEY) || '[]');
+    const pending = list.filter(x => (x.signatureStatus || 'pending') === 'pending');
+    pending.sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
+    return pending;
+  } catch { return []; }
+}
+
+function selectPendingOffline(localId) {
+  selectHintEl?.classList.add('d-none');
+  loadOfflineNote(localId);
+}
+
+function loadOfflineNote(localId) {
+  logDebug('loadOfflineNote start', { localId });
+  if (loadError) loadError.classList.add('d-none');
+  noteSection.classList.add('d-none');
+  try {
+    const list = JSON.parse(localStorage.getItem(OFFLINE_NOTES_KEY) || '[]');
+    const data = list.find(x => x.localId === localId);
+    if (!data) {
+      if (loadError) {
+        loadError.textContent = '找不到此離線簽單';
+        loadError.classList.remove('d-none');
+      }
+      return;
+    }
+    currentDocId = null;
+    currentLocalId = localId;
+    renderNote(data);
+  } catch (e) {
+    logDebug('loadOfflineNote error', { message: e.message });
+    if (loadError) {
+      loadError.textContent = '載入離線簽單失敗：' + e.message;
+      loadError.classList.remove('d-none');
+    }
+  }
+}
+
+function enqueueOfflineSignature(item) {
+  try {
+    const list = JSON.parse(localStorage.getItem(SIG_QUEUE_KEY) || '[]');
+    list.push(item);
+    localStorage.setItem(SIG_QUEUE_KEY, JSON.stringify(list));
+    logDebug('offline signature enqueued', { id: item.id, localId: item.localId });
+  } catch (e) {
+    logDebug('enqueue offline signature failed', { message: e.message });
+  }
+}
+
+function updateOfflineNoteSignature(localId, dataUrl) {
+  try {
+    const list = JSON.parse(localStorage.getItem(OFFLINE_NOTES_KEY) || '[]');
+    const idx = list.findIndex(x => x.localId === localId);
+    if (idx >= 0) {
+      list[idx].signatureStatus = 'completed';
+      list[idx].signatureDataUrl = dataUrl;
+      list[idx].signedAt = new Date().toISOString();
+      localStorage.setItem(OFFLINE_NOTES_KEY, JSON.stringify(list));
+      logDebug('offline note updated with signature', { localId });
+    }
+  } catch (e) {
+    logDebug('update offline note signature failed', { message: e.message });
+  }
+}
+
+// 方案A：即時注入最新離線 pending 簽單到清單頂部（黃色）
+function injectLatestOffline() {
+  const latest = getOfflinePendingNotes();
+  if (!Array.isArray(latest) || latest.length === 0) return;
+
+  // 建立現有清單鍵集合，避免重覆插入
+  const existingKeys = new Set();
+  pendingListEl.querySelectorAll('li').forEach(li => {
+    const btn = li.querySelector('button');
+    if (!btn) return;
+    const key = btn.getAttribute('data-local-id') || btn.getAttribute('data-id');
+    if (key) existingKeys.add(key);
+  });
+
+  let injected = 0;
+  latest.forEach(item => {
+    const key = item.localId;
+    if (!key || existingKeys.has(key)) return; // 已存在不重覆插入
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-warning';
+    const date = (item.date || item.createdAt || '').toString().split('T')[0];
+    li.innerHTML = `<div>
+        <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} <span class="badge bg-warning text-dark ms-1">離線</span></div>
+        <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
+      </div>
+      <button class="btn btn-sm btn-outline-primary" data-local-id="${item.localId}"><i class="bi bi-pencil-square"></i></button>`;
+
+    li.addEventListener('click', (e) => {
+      const lid = e.target.closest('button')?.getAttribute('data-local-id') || item.localId;
+      selectPendingOffline(lid);
+    });
+
+    pendingListEl.insertBefore(li, pendingListEl.firstChild);
+    existingKeys.add(key);
+    injected++;
+  });
+
+  if (injected > 0) {
+    pendingLoadingEl.style.display = 'none';
+    noPendingEl.classList.add('d-none');
+    pendingListEl.style.display = 'block';
+    logDebug('injectLatestOffline injected', { injected });
+  }
+}
+
+// 事件驅動：離線筆數變更或 storage 變更時即時插入
+window.addEventListener('offline-count-changed', () => {
+  logDebug('offline-count-changed event received, inject latest offline');
+  try { injectLatestOffline(); } catch { loadPendingList(); }
+});
+window.addEventListener('storage', (e) => {
+  if (e.key === OFFLINE_NOTES_KEY) {
+    logDebug('storage event: offline notes changed, inject latest offline');
+    try { injectLatestOffline(); } catch { loadPendingList(); }
+  }
 });

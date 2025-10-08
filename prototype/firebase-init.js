@@ -23,12 +23,26 @@ const auth = getAuth(app);
 const storage = getStorage(app);
 
 
-// 如果在本地 → 使用 emulator
-if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-  connectFirestoreEmulator(db, "localhost", 8080);
-  connectAuthEmulator(auth, "http://localhost:9099");
-  connectStorageEmulator(storage, "localhost", 9199);
-  console.log("✅ Connected to Firebase Emulators");
+// 是否使用 Emulator 可由查詢參數控制：
+//   ?emu=1      強制使用 Emulator
+//   ?prod=1     在本機也使用正式環境（停用 Emulator）
+const params = new URLSearchParams(location.search);
+const forceProd = params.get('prod') === '1';
+const forceEmu = params.get('emu') === '1' || params.get('useEmu') === '1';
+const isLocalHost = (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+const useEmulators = forceEmu || (!forceProd && isLocalHost);
+
+if (useEmulators) {
+  try {
+    connectFirestoreEmulator(db, "localhost", 8080);
+    connectAuthEmulator(auth, "http://localhost:9099");
+    connectStorageEmulator(storage, "localhost", 9199);
+    console.log("✅ Using Firebase Emulators (Firestore:8080 Auth:9099 Storage:9199)");
+  } catch (e) {
+    console.warn("⚠️ Failed to connect to emulators:", e);
+  }
+} else {
+  console.log("✅ Using Firebase Production Services");
 }
 
 
