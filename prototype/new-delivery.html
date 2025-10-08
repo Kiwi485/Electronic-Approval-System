@@ -150,10 +150,13 @@
         </div>
     </div>
 
+    <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
+    <script type="module" src="js/config-flags.js"></script>
     <!-- 離線管理與新增簽單腳本 -->
     <script type="module" src="js/offline.js"></script>
     <script type="module" src="js/new-delivery.js"></script>
     <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
     <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/tools/seed-drivers.js"></script>
 </body>
 </html>

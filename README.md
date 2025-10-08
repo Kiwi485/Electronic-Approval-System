@@ -27,6 +27,99 @@
 - Browser Console 沒有 Firebase 連接錯誤  
 - 能正常在不同頁面間導航  
 
+## 🔄 切換 Mock → Firestore
+1. 開啟 `prototype/js/config-flags.js`，將 `window.APP_FLAGS.USE_MOCK_DATA` 改為 `false` 後重新整理頁面。  
+2. 確認 Firestore 內已建立以下集合與測試資料：  
+   - `machineCategories`
+
+     | 文件 ID | name | isActive | order |
+     |---------|------|----------|-------|
+     | excavator | 挖土機 | true | 10 |
+     | crane | 吊車 | true | 20 |
+     | old-machine | 舊機具示例 | false | 90 |
+
+   - `machines`
+
+     | 文件 ID | name | categoryId | isActive |
+     |---------|------|------------|----------|
+     | m-pc200 | PC200 挖土機 | excavator | true |
+     | m-sumito | 住友吊車 S1 | crane | true |
+     | m-retire | 報廢示例機 | old-machine | false |
+
+     > 以上欄位請一併填入 `createdAt`、`updatedAt`（Server Timestamp）與 `usageCount`（預設 0），以便驗證簽單與管理頁顯示。
+3. `prototype/js/api/index.js` 會依旗標自動切換 Mock 或 Firestore 實作，簽單頁面與管理頁不需修改引用。  
+4. 驗證：切換後重新載入「簽單 / 管理」頁面，應能讀到 Firestore 實際資料，且 `listActiveMachines()` 僅回傳 `isActive=true` 的機具。
+
+## 🌱 測試資料種子 (Seed)
+為了避免手動逐筆新增，已提供 `dev-seed.js`。在任何已載入 Firebase 的頁面 (例如 `new-delivery.html`) 打開瀏覽器 Console：
+
+```javascript
+import('./js/dev-seed.js').then(m => m.seedAll());
+```
+
+預期輸出：
+```
+[Seed] 完成： { categories:3, machines:3, drivers:3, force:false }
+```
+再次執行若文件已存在會顯示 0。要強制覆蓋：
+```javascript
+import('./js/dev-seed.js').then(m => m.seedAll({ force:true }));
+```
+
+種子內容：
+- machineCategories: excavator / crane / old-machine
+- machines: m-pc200 / m-sumito / m-retire
+- users (drivers): u-wang / u-lee / u-retire
+
+快速驗證：
+```javascript
+import('./js/api/index.js').then(api => {
+  api.listCategories().then(c=>console.table(c));
+  api.listAllMachines().then(m=>console.table(m));
+  api.listAllDrivers().then(d=>console.table(d));
+});
+```
+
+若 `import('./js/dev-seed.js')` 一直載入舊版本，附加 query 參數清快取：
+```javascript
+import(`./js/dev-seed.js?t=${Date.now()}`).then(m => m.seedAll());
+```
+
+---
+
+## 🧪 核心驗收步驟 (縮寫版)
+| # | 操作 | 期待結果 |
+|---|------|----------|
+| 1 | 啟動 emulators + http-server | Console 顯示 Connected / 站台可開 |
+| 2 | 執行 seedAll | 三類三機三司機寫入 |
+| 3 | `api.getApiSource()` | 顯示 firestore |
+| 4 | `createMachine()` | Firestore 新文件含 createdAt/updatedAt |
+| 5 | `updateMachine()` 停用 | updatedAt 更新且 active 列表排除 |
+| 6 | 建立簽單 (多機具/司機) | deliveryNotes 出現 machines[] / drivers[] |
+| 7 | 切 `ENABLE_MACHINE_DEACTIVATE_FILTER=true` | 停用機具不出現在表單 |
+| 8 | 離線建立後恢復網路 | 暫存同步，歷史可見 |
+| 9 | 未登入訪問受保護頁 | 被導向登入或規則拒絕 |
+| 10 | Console | 無未捕捉錯誤 |
+
+---
+
+## 🔥 Smoke Script (一次跑)
+```javascript
+(async () => {
+  const api = await import('./js/api/index.js');
+  console.log('SOURCE=', api.getApiSource?.());
+  await import('./js/dev-seed.js').then(m=>m.seedAll());
+  const m = await api.createMachine({ name:'SmokeTest 機具', categoryId:null });
+  console.log('Created', m.id, m.createdAt);
+  const mu = await api.updateMachine(m.id, { isActive:false });
+  console.log('Updated active', mu.isActive, mu.updatedAt);
+  const activeIds = (await api.listActiveMachines()).map(x=>x.id);
+  if (activeIds.includes(m.id)) console.warn('❌ 停用機具仍在 active 列表'); else console.log('✅ 停用過濾 OK');
+})();
+```
+
+---
+
 ---
 
 ## 📋 當前開發任務（Sprint 1）
@@ -454,5 +547,252 @@ service firebase.storage {
 - [ ] 登出 → 回 `login.html`，重新訪問受保護頁再被攔截
 
 
-  
+下面這份「團隊操作指南」你可以直接貼到 README 或傳給隊友，讓大家 5 分鐘內搞懂要做什麼、怎麼做、怎麼不互相踩到。已依你目前情境（已 merge 契約分支、開始實作機具/類別/多選簽單）整理。
+
+---
+
+# 🧭 Sprint 作業指南（多機具 / 多司機 / 啟用停用）
+
+## 🎯 本迭代目標（完成後可 Demo）
+1. 後台可維護「機具類別」「機具（含啟用/停用）」  
+2. 新增簽單頁可多選機具 & 多選司機（寫入 `machines[]` / `drivers[]`，並保留舊欄位 machine / driverName 過渡）  
+3. 停用的機具在新增簽單時不顯示（歷史仍顯示舊資料）  
+4. 可在 Mock 與 Firestore 兩種模式切換測試  
+
+---
+
+## 🗂 目錄結構（相關新增區塊）
+```
+prototype/
+  js/
+    api/
+      machines-api.contract.js
+      machines-api.mock.js
+      drivers-api.mock.js
+      (將新增) machines-api.firestore.js
+      (將新增) drivers-api.firestore.js
+      (將新增) index.js
+    config-flags.js
+    category-admin.js        (將新增)
+    machine-admin.js         (將新增)
+    filter-utils.js          (將新增)
+  category-admin.html        (將新增)
+  machine-admin.html         (將新增)
+  new-delivery.html          (會改：加入多選區)
+```
+
+---
+
+## 🔑 穩定資料契約（請勿改名，只能新增欄位）
+Machine:
+```
+{ id, name, categoryId, isActive, usageCount, lastUsedAt }
+```
+MachineCategory:
+```
+{ id, name, slug?, isActive, order }
+```
+DeliveryNote（新增欄位）：
+```
+machines: [{ machineId, name, categoryId }]
+drivers: [{ driverId, name }]
+```
+過渡保留：machine（單機具時填入 name）、driverName（單司機時填入 name）
+
+---
+
+## 🏁 分工（四人）
+| 角色 | 分支建議 | 主要任務 | 依賴 |
+|------|----------|----------|------|
+| A | `feat/firestore-machines` | Firestore 版本 API + 規則 + 測試資料 | 已有契約 |
+| B | `feat/admin-category` → `feat/admin-machine` | 類別管理頁 / 機具管理頁 | 只需契約（初期可 Mock） |
+| C | `feat/delivery-multi` | 簽單頁多機具/多司機改造 + 驗證整合 | 契約 |
+| D | `feat/integration-filter` | 停用過濾、旗標測試、驗收腳本、文件更新 | 依 B/C |
+
+---
+
+## 🏷 功能旗標（config-flags.js）
+```
+USE_MOCK_DATA: true | false
+ENABLE_MULTI_MACHINE: true
+ENABLE_MULTI_DRIVER: true
+ENABLE_MACHINE_DEACTIVATE_FILTER: false
+```
+使用規則：
+- 開發前期保持 `USE_MOCK_DATA=true`（除 A 測 Firestore）
+- 停用過濾完成才把 `ENABLE_MACHINE_DEACTIVATE_FILTER` 打開
+- 不要私自改旗標鍵名稱
+
+---
+
+## 🧪 每個角色起手式
+
+### A（Firestore 實作）
+1. 建立 Firestore 集合：`machineCategories`, `machines`  
+2. 加資料（至少 1 類別 + 3 機具，含 1 台 isActive=false）  
+3. 新增 `machines-api.firestore.js`：
+   - `listActiveMachines()` → where isActive=true  
+   - `createMachine()` → addDoc + serverTimestamp  
+   - `updateMachine()` → updateDoc + updatedAt  
+4. 新增 `drivers-api.firestore.js`（暫硬寫 2 司機或從 users 撈）  
+5. 寫 `index.js` 切換：
+   ```
+   const useMock = window.APP_FLAGS?.USE_MOCK_DATA;
+   export * from (useMock ? './machines-api.mock.js' : './machines-api.firestore.js');
+   ```
+6. 規則（初稿）：
+   ```
+   allow read: if request.auth != null;
+   allow create, update: if request.auth != null; // TODO 之後限制 admin
+   ```
+
+### B（類別＋機具管理頁）
+1. 新增 `category-admin.html` → 表格 + 新增/編輯 Modal  
+2. 新增 `machine-admin.html` → 表格 + 新增/編輯 Modal + 啟用/停用按鈕  
+3. 呼叫 API（先用 mock）：
+   - 類別：`listCategories()`, `createCategory()`, `updateCategory()`  
+   - 機具：`listAllMachines()`, `createMachine()`, `updateMachine()`  
+4. 停用機具：`updateMachine(id, { isActive: false })`  
+
+### C（簽單頁多選改造）
+1. 在 `new-delivery.html` 加兩個區塊（機具、司機）  
+2. CSS/排版簡單即可（fieldset + checkbox list）  
+3. form-validation.js 新增：
+   ```
+   function collectSelectedMachines(){...}
+   function collectSelectedDrivers(){...}
+   ```
+4. 在 `buildValidatedPayload()` 塞：
+   ```
+   machines: collectSelectedMachines()
+   drivers: collectSelectedDrivers()
+   machine: machines.length===1 ? machines[0].name : ''
+   driverName: drivers.length===1 ? drivers[0].name : ''
+   ```
+5. 不選機具允許提交  
+6. `ENABLE_MULTI_*` 為 false 時隱藏新區塊（加簡單判斷）  
+
+### D（整合 + 過濾 + 驗收）
+1. 寫 `filter-utils.js`：
+   ```
+   export function filterActiveMachines(list){
+     if(!window.APP_FLAGS?.ENABLE_MACHINE_DEACTIVATE_FILTER) return list;
+     return list.filter(m => m.isActive);
+   }
+   ```
+2. 提供驗收腳本（console 執行）：
+   ```
+   import('./js/api/index.js')
+     .then(api => api.listAllMachines().then(all=>{
+        console.log('All:', all);
+        console.log('After filter:', filterActiveMachines(all));
+     }));
+   ```
+3. 驗收流程文件化（README 新增「驗收清單」）  
+4. 確認切換 `USE_MOCK_DATA` 正常  
+
+---
+
+## 🧪 驗收清單（D 主導）
+| 項目 | 條件 | 預期 |
+|------|------|------|
+| 1 | USE_MOCK_DATA=true | 表單/管理頁可載入 mock |
+| 2 | USE_MOCK_DATA=false | Firestore 資料載入成功 |
+| 3 | 新增類別 | 管理頁出現；機具表單下拉更新 |
+| 4 | 新增機具 | 出現在簽單頁（啟用） |
+| 5 | 停用機具 | 簽單頁（filter 開）不顯示 |
+| 6 | 簽單選 2 機具 2 司機 | Firestore 內 `machines.length=2` `drivers.length=2` |
+| 7 | 只選 1 機具 1 司機 | 有舊欄位 machine / driverName |
+| 8 | 不選機具 | `machines=[]` 仍提交成功 |
+| 9 | 切 flag (filter off) | 停用機具再度出現 |
+| 10 | Console | 無未捕捉錯誤 |
+
+---
+
+## 🧱 修改規則（所有人要遵守）
+| 類別 | 規則 | 範例 |
+|------|------|------|
+| 檔案變更 | 只在自己模組新增，不大改別人檔案 | form-validation 只加區塊註解 |
+| 欄位 | 不改既有欄位名稱 | 不把 machine 改成 machinesName |
+| 新功能 | 用旗標包起來 | if(!APP_FLAGS.ENABLE_MULTI_MACHINE) hide |
+| Firestore 呼叫 | 透過 API 模組，不散落 query | import { listActiveMachines } from './js/api/index.js' |
+| console | 不留除錯 log | 移除 console.log('test') |
+
+---
+
+## 🪛 常見錯誤對應
+| 症狀 | 可能原因 | 解法 |
+|------|----------|------|
+| listActiveMachines 空 | Firestore 無資料 / 規則拒絕 | Console 看 error；用 mock 測 |
+| Payload 缺 machines | 忘了呼叫 collectSelectedMachines | 檢查 buildValidatedPayload |
+| 停用後仍顯示 | 旗標未開 / 未用 filter | 檢查 ENABLE_MACHINE_DEACTIVATE_FILTER |
+| drivers 陣列空 | 未勾選、未載入 mock | 確認載入 drivers mock |
+| 切 USE_MOCK_DATA=false 爆錯 | index.js 未匯出實作 | 檢查 export * from ... |
+
+---
+
+## 🤝 每日同步格式（群組貼）
+```
+(完成) 機具新增/停用 API 接好
+(進行) 編輯 Modal
+(阻礙) 需要 categories 回傳 order 欄位
+```
+
+---
+
+## 🧪 本地快速測試指令（DevTools Console）
+載入全部機具：
+```
+import('./js/api/index.js').then(m => m.listAllMachines().then(console.log))
+```
+切換為 Firestore（修改 flags 後重新整理）：
+```
+window.APP_FLAGS.USE_MOCK_DATA = false
+```
+
+---
+
+## 📝 PR Template 推薦
+```
+### 內容
+- 新增：machine-admin.html
+- 新增：machine-admin.js
+- 使用 API：listAllMachines / createMachine / updateMachine
+
+### 測試
+- [ ] mock 模式 ok
+- [ ] firestore 模式 ok
+- [ ] 啟用/停用後列表刷新
+- [ ] 無 console.error
+
+### 截圖
+(貼上)
+
+### 待辦(後續)
+- 欄位排序
+```
+
+---
+
+## 🧯 緊急回復（出錯時）
+| 問題 | 回復步驟 |
+|------|----------|
+| Firestore 規則擋住全部 | 回滾到上個規則 commit / emulator 測試 | 
+| 欄位填錯導致前端壞 | Firestore console 手動補欄位 / 用遷移腳本 |
+
+---
+
+## 🧾 後續（下個迭代可做）
+- 司機指派（machineAssignments）  
+- usageCount 自動遞增（Cloud Function）  
+- 角色權限（Custom Claims）  
+- 歷史查詢篩選（依機具 / 司機 / 狀態）  
+
+---
+
+## 📌 TL;DR（1 行給趕時間的人）
+大家各自開分支 → 用 API 模組 → 不改欄位名稱 → 多機具/司機寫入陣列但保留舊欄位 → 停用過濾用旗標控制。
+
+---
+
 
