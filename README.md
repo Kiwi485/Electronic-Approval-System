@@ -50,76 +50,6 @@
 3. `prototype/js/api/index.js` 會依旗標自動切換 Mock 或 Firestore 實作，簽單頁面與管理頁不需修改引用。  
 4. 驗證：切換後重新載入「簽單 / 管理」頁面，應能讀到 Firestore 實際資料，且 `listActiveMachines()` 僅回傳 `isActive=true` 的機具。
 
-## 🌱 測試資料種子 (Seed)
-為了避免手動逐筆新增，已提供 `dev-seed.js`。在任何已載入 Firebase 的頁面 (例如 `new-delivery.html`) 打開瀏覽器 Console：
-
-```javascript
-import('./js/dev-seed.js').then(m => m.seedAll());
-```
-
-預期輸出：
-```
-[Seed] 完成： { categories:3, machines:3, drivers:3, force:false }
-```
-再次執行若文件已存在會顯示 0。要強制覆蓋：
-```javascript
-import('./js/dev-seed.js').then(m => m.seedAll({ force:true }));
-```
-
-種子內容：
-- machineCategories: excavator / crane / old-machine
-- machines: m-pc200 / m-sumito / m-retire
-- users (drivers): u-wang / u-lee / u-retire
-
-快速驗證：
-```javascript
-import('./js/api/index.js').then(api => {
-  api.listCategories().then(c=>console.table(c));
-  api.listAllMachines().then(m=>console.table(m));
-  api.listAllDrivers().then(d=>console.table(d));
-});
-```
-
-若 `import('./js/dev-seed.js')` 一直載入舊版本，附加 query 參數清快取：
-```javascript
-import(`./js/dev-seed.js?t=${Date.now()}`).then(m => m.seedAll());
-```
-
----
-
-## 🧪 核心驗收步驟 (縮寫版)
-| # | 操作 | 期待結果 |
-|---|------|----------|
-| 1 | 啟動 emulators + http-server | Console 顯示 Connected / 站台可開 |
-| 2 | 執行 seedAll | 三類三機三司機寫入 |
-| 3 | `api.getApiSource()` | 顯示 firestore |
-| 4 | `createMachine()` | Firestore 新文件含 createdAt/updatedAt |
-| 5 | `updateMachine()` 停用 | updatedAt 更新且 active 列表排除 |
-| 6 | 建立簽單 (多機具/司機) | deliveryNotes 出現 machines[] / drivers[] |
-| 7 | 切 `ENABLE_MACHINE_DEACTIVATE_FILTER=true` | 停用機具不出現在表單 |
-| 8 | 離線建立後恢復網路 | 暫存同步，歷史可見 |
-| 9 | 未登入訪問受保護頁 | 被導向登入或規則拒絕 |
-| 10 | Console | 無未捕捉錯誤 |
-
----
-
-## 🔥 Smoke Script (一次跑)
-```javascript
-(async () => {
-  const api = await import('./js/api/index.js');
-  console.log('SOURCE=', api.getApiSource?.());
-  await import('./js/dev-seed.js').then(m=>m.seedAll());
-  const m = await api.createMachine({ name:'SmokeTest 機具', categoryId:null });
-  console.log('Created', m.id, m.createdAt);
-  const mu = await api.updateMachine(m.id, { isActive:false });
-  console.log('Updated active', mu.isActive, mu.updatedAt);
-  const activeIds = (await api.listActiveMachines()).map(x=>x.id);
-  if (activeIds.includes(m.id)) console.warn('❌ 停用機具仍在 active 列表'); else console.log('✅ 停用過濾 OK');
-})();
-```
-
----
-
 ---
 
 ## 📋 當前開發任務（Sprint 1）
@@ -794,5 +724,341 @@ window.APP_FLAGS.USE_MOCK_DATA = false
 大家各自開分支 → 用 API 模組 → 不改欄位名稱 → 多機具/司機寫入陣列但保留舊欄位 → 停用過濾用旗標控制。
 
 ---
+
+
+
+---
+
+# ✅ Firestore 與 Mock 全面驗收測試指引
+
+> 本指南為「從零到驗收」的完整測試流程。
+> 依照順序執行可驗證 machines / drivers Firestore + Mock 切換、
+> `updatedAt` 更新、啟用/停用篩選、多機具、多司機、離線同步與權限控制。
+
+---
+
+## 🧩 0. 前置快速檢查 (30 秒)
+
+```javascript
+import('./js/api/index.js').then(api => console.log('API_SOURCE=', api.getApiSource?.() || api.API_SOURCE));
+```
+
+**預期：**
+`firestore`
+（若顯示 mock → 檢查以下三項）
+
+* `config-flags.js` 是否先載入
+* `USE_MOCK_DATA=false`
+* 強制重新整理 (`Ctrl + Shift + R`)
+
+---
+
+## ⚙️ 1. 啟動環境
+
+在 PowerShell（專案根目錄）執行：
+
+```powershell
+firebase emulators:start
+```
+
+另開新視窗（同樣根目錄）：
+
+```powershell
+npx http-server .\prototype -p 3000
+```
+
+**確認：**
+
+* 前端：[http://127.0.0.1:3000/new-delivery.html](http://127.0.0.1:3000/new-delivery.html) 可開啟
+* Emulator UI：[http://localhost:4000](http://localhost:4000) 有資料樹
+* Console 出現：`✅ Connected to Firebase Emulators`
+
+---
+
+## 🌱 2. 種入測試資料 (自動種子)
+
+在瀏覽器 Console（例如 `index.html` 或 `new-delivery.html`）執行：
+
+```javascript
+import('./js/dev-seed.js').then(m => m.seedAll());
+```
+
+**預期 Console：**
+
+```
+[Seed] 完成： { categories:3, machines:3, drivers:3 }
+```
+
+驗證：
+
+```javascript
+import('./js/api/index.js').then(api => {
+  api.listCategories().then(console.table);
+  api.listAllMachines().then(console.table);
+  api.listAllDrivers().then(console.table);
+});
+```
+
+**預期結果：**
+3 筆類別、3 台機具（含 1 停用）、3 位司機。
+
+---
+
+## 🔀 3. Firestore / Mock 切換測試
+
+```javascript
+// 查看目前來源
+import('./js/api/index.js').then(api => console.log('SOURCE=', api.getApiSource()));
+
+// 切換到 Mock
+window.APP_FLAGS.USE_MOCK_DATA = true;
+import('./js/api/index.js').then(api => api.listAllMachines().then(m => console.log('After switch SOURCE=', api.getApiSource(), 'Count=', m.length)));
+
+// 切回 Firestore
+window.APP_FLAGS.USE_MOCK_DATA = false;
+import('./js/api/index.js').then(api => console.log('Back SOURCE=', api.getApiSource()));
+```
+
+若筆數或資料內容不同 → 切換成功。
+（測完建議重新整理恢復預設）
+
+---
+
+## 🧮 4. listActiveMachines() / 停用過濾
+
+```javascript
+import('./js/api/index.js').then(api => {
+  api.listAllMachines().then(all => console.table(all));
+  api.listActiveMachines().then(active => console.table(active));
+});
+```
+
+**預期：**
+`listActiveMachines()` 不包含 `isActive=false` 的機具。
+（若啟用 `ENABLE_MACHINE_DEACTIVATE_FILTER` → UI 也會隱藏）
+
+---
+
+## ⚙️ 5. 建立機具 + 驗證 createdAt / updatedAt
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.createMachine({ name:'測試新增機具 X', categoryId:null }).then(doc => {
+    console.log('Created Machine:', doc);
+    window.__TEST_MACHINE_ID = doc.id;
+  })
+);
+```
+
+**預期：**
+回傳物件含：
+
+* `id`
+* `isActive:true`
+* `createdAt`
+* `updatedAt`
+
+Emulator UI 中應可看到該文件與時間戳記。
+
+---
+
+## 🔧 6. 更新機具 + 驗證 updatedAt
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.updateMachine(window.__TEST_MACHINE_ID, { isActive:false }).then(doc => {
+    console.log('Updated Machine:', doc);
+  })
+);
+```
+
+**驗證：**
+
+* `isActive=false`
+* `updatedAt` > `createdAt`
+* active 列表不含此 ID
+
+---
+
+## 🗂️ 7. 類別 CRUD 測試
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.createCategory({ name:'臨時測試類別', order:30 }).then(c => {
+    console.log('Created Category:', c);
+    window.__TEST_CAT_ID = c.id;
+  })
+);
+```
+
+更新類別：
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.updateCategory(window.__TEST_CAT_ID, { name:'臨時測試類別-改', order:35 }).then(console.log)
+);
+```
+
+列出：
+
+```javascript
+import('./js/api/index.js').then(api => api.listCategories().then(console.table));
+```
+
+---
+
+## 🚗 8. 司機 (Drivers) 測試
+
+```javascript
+import('./js/api/index.js').then(api => api.listAllDrivers().then(console.table));
+import('./js/api/index.js').then(api => api.listActiveDrivers().then(console.table));
+```
+
+若支援更新：
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.updateDriver && api.updateDriver('<driver id>', { isActive:false }).then(console.log)
+);
+```
+
+---
+
+## 🧾 9. 簽單建立（多機具 / 多司機）
+
+1. 開啟 `new-delivery.html`
+2. 填寫客戶、地點、金額等必填欄位
+3. 勾選 ≥2 台啟用機具、≥2 位司機
+4. 提交後 Firestore `deliveryNotes` 應包含：
+
+   * `machines[]`、`drivers[]`
+   * 若僅 1 筆 → 仍保留 `machine`、`driverName`
+   * `signatureStatus: "pending"`
+   * `serverCreatedAt` (Timestamp)
+
+---
+
+## ⚙️ 10. 停用機具對 UI 影響
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.listActiveMachines().then(list => api.updateMachine(list[0].id, { isActive:false }))
+);
+```
+
+打開 `config-flags.js` 或在 Console：
+
+```javascript
+window.APP_FLAGS.ENABLE_MACHINE_DEACTIVATE_FILTER = true;
+```
+
+重新載入頁面 → 該台機具應消失。
+改回 `false` → 應重新出現。
+
+---
+
+## 🔌 11. 離線同步測試
+
+1. DevTools → Network → Offline
+2. 建立一筆簽單 → Console 顯示暫存訊息
+3. 查看暫存：
+
+   ```javascript
+   offlineManager.getOfflineData()
+   ```
+4. 恢復網路 → 出現 `[Offline] 開始同步` → Firestore 新增該筆資料
+5. 確認暫存清空：
+
+   ```javascript
+   offlineManager.getOfflineData()
+   ```
+
+---
+
+## 🔐 12. 權限測試 (未登入阻擋)
+
+登出：
+
+```javascript
+import('./js/auth.js').then(m => m.logout && m.logout());
+```
+
+嘗試建立資料：
+
+```javascript
+import('./js/api/index.js').then(api =>
+  api.createMachine({ name:'不應成功', categoryId:null }).catch(console.error)
+);
+```
+
+**預期：** `permission denied`（若規則尚未加嚴，請加上 TODO）
+
+---
+
+
+
+## 🧩 13. 常見錯誤排查
+
+| 症狀                    | 解法                                      |
+| --------------------- | --------------------------------------- |
+| Firestore 不更新         | 檢查 `api.getApiSource()` 是否仍為 mock       |
+| `updatedAt` 沒變        | Emulator UI 未刷新，或更新失敗                   |
+| createMachine 被拒      | 未登入或 Firestore 規則限制                     |
+| listActiveMachines 為空 | 無 isActive=true 文件或種子未執行                |
+| 離線不同步                 | 手動呼叫 `offlineManager.syncOfflineData()` |
+| drivers 為空            | Firestore 未 seed 或仍在 mock 模式            |
+
+---
+
+## ⚡ 14. 快速指令合集
+
+```javascript
+// 顯示來源
+import('./js/api/index.js').then(api => console.log(api.getApiSource()));
+
+// 種子 (若已存在不覆蓋)
+import('./js/dev-seed.js').then(m => m.seedAll());
+
+// 建立 + 更新機具
+import('./js/api/index.js').then(api =>
+  api.createMachine({ name:'Temp 機具', categoryId:null })
+  .then(r => api.updateMachine(r.id,{ isActive:false }))
+);
+
+// 啟用機具列表
+import('./js/api/index.js').then(api => api.listActiveMachines().then(console.table));
+
+// 類別與司機
+import('./js/api/index.js').then(api => { api.listCategories().then(console.table); api.listAllDrivers().then(console.table); });
+
+// 離線同步手動觸發
+offlineManager.syncOfflineData();
+
+// 切換 Mock
+window.APP_FLAGS.USE_MOCK_DATA = true;
+```
+
+---
+
+## 🧪 15. 自動化冒煙測試腳本
+
+```javascript
+(async () => {
+  const api = await import('./js/api/index.js');
+  console.log('SOURCE=', api.getApiSource());
+  const catBefore = await api.listCategories();
+  console.log('Categories count=', catBefore.length);
+  const m = await api.createMachine({ name:'SmokeTest M', categoryId:null });
+  console.log('Created machine id=', m.id, 'active=', m.isActive, 'createdAt=', m.createdAt);
+  const mu = await api.updateMachine(m.id, { isActive:false });
+  console.log('Updated active should be false =>', mu.isActive);
+  const activeList = await api.listActiveMachines();
+  if (activeList.find(x => x.id === m.id)) console.warn('❌ 停用機具仍出現在 active 列表');
+  else console.log('✅ 停用過濾正常');
+})();
+```
+
+---
+
 
 
