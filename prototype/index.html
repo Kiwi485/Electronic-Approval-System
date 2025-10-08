@@ -264,6 +264,8 @@
     </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- 旗標需最先載入（此頁只有一個 module, 放在 auth-guard 前） -->
+    <script type="module" src="./js/config-flags.js"></script>
     <script type="module" src="./js/auth-guard.js"></script>
     
 </body>
