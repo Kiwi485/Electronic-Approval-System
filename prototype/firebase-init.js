@@ -29,15 +29,17 @@ const storage = getStorage(app);
 const params = new URLSearchParams(location.search);
 const forceProd = params.get('prod') === '1';
 const forceEmu = params.get('emu') === '1' || params.get('useEmu') === '1';
-const isLocalHost = (location.hostname === "localhost" || location.hostname === "127.0.0.1");
-const useEmulators = forceEmu || (!forceProd && isLocalHost);
+const host = location.hostname; // 支援 localhost、127.0.0.1、或區網 IP（手機測試）
+const isIp = /^(\d+\.){3}\d+$/.test(host);
+const isLocalLike = (host === 'localhost' || host === '127.0.0.1' || isIp);
+const useEmulators = forceEmu || (!forceProd && isLocalLike);
 
 if (useEmulators) {
   try {
-    connectFirestoreEmulator(db, "localhost", 8080);
-    connectAuthEmulator(auth, "http://localhost:9099");
-    connectStorageEmulator(storage, "localhost", 9199);
-    console.log("✅ Using Firebase Emulators (Firestore:8080 Auth:9099 Storage:9199)");
+    connectFirestoreEmulator(db, host, 8080);
+    connectAuthEmulator(auth, `http://${host}:9099`);
+    connectStorageEmulator(storage, host, 9199);
+    console.log(`✅ Using Firebase Emulators at ${host} (fs:8080 auth:9099 storage:9199)`);
   } catch (e) {
     console.warn("⚠️ Failed to connect to emulators:", e);
   }

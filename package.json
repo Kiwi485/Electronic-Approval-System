@@ -1,0 +1,23 @@
+{
+  "name": "electronic-approval-system",
+  "version": "1.0.0",
+  "description": "智慧簽單及派工系統，支援精準工時計算、彈性機具管理、多平台離線/同步功能。   前端採用 **Firebase Web SDK**，後端採用 **Firebase**（Authentication, Firestore, Storage, Functions, Hosting, Messaging）。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kiwi485/Electronic-Approval-System.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kiwi485/Electronic-Approval-System/issues"
+  },
+  "homepage": "https://github.com/Kiwi485/Electronic-Approval-System#readme",
+  "devDependencies": {
+    "firebase-tools": "^14.17.0"
+  }
+}
