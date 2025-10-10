@@ -163,6 +163,16 @@ function selectPending(id) {
 
 function renderNote(d) {
   noteSection.classList.remove('d-none');
+  const formatNames = (arr, fallback) => {
+    try {
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map(x => x?.name || x?.displayName || x?.id || '').filter(Boolean).join('、');
+      }
+    } catch {}
+    return fallback || '-';
+  };
+  const machinesText = formatNames(d.machines, d.machine || '-');
+  const driversText = formatNames(d.drivers, d.driverName || '-');
   const date = (d.date || d.createdAt || '').toString().split('T')[0];
   noteBody.innerHTML = `
     <div class="row g-2 small">
@@ -172,9 +182,9 @@ function renderNote(d) {
       <div class="col-md-12"><strong>作業狀況:</strong><br>${(d.work || '').replace(/\n/g,'<br>') || '-'}</div>
       <div class="col-md-4"><strong>時間:</strong> ${(d.startTime||'') + (d.endTime?(' ~ '+d.endTime):'')}</div>
       <div class="col-md-4"><strong>金額:</strong> ${d.amount? 'NT$ '+d.amount : '-'}</div>
-      <div class="col-md-4"><strong>機具:</strong> ${d.machine||'-'}</div>
+      <div class="col-md-4"><strong>機具:</strong> ${machinesText}</div>
       <div class="col-md-4"><strong>車號:</strong> ${d.vehicleNumber||'-'}</div>
-      <div class="col-md-4"><strong>司機:</strong> ${d.driverName||'-'}</div>
+      <div class="col-md-4"><strong>司機:</strong> ${driversText}</div>
       <div class="col-md-12"><strong>備註:</strong> ${(d.remark||'').replace(/\n/g,'<br>')||'-'}</div>
     </div>`;
   setStatusBadge(d.signatureStatus || 'pending');

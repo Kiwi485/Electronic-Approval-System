@@ -127,6 +127,30 @@
                                 <textarea class="form-control" rows="2" name="remark" id="remark" placeholder="其他說明..."></textarea>
                             </div>
 
+                            <!-- 多機具/多司機（受旗標控制，預設隱藏；不影響既有欄位） -->
+                            <div class="col-12 d-none" id="multiMachineSection">
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-gear-wide-connected me-1"></i>選擇機具（可多選）</span>
+                                    <span class="text-muted small">僅選 1 項時會同步填入「機具」欄位</span>
+                                </label>
+                                <div class="border rounded p-2" style="max-height:200px;overflow:auto;">
+                                    <div class="text-muted small" id="machinesLoading">載入中...</div>
+                                    <div class="row g-2" id="machinesOptions"></div>
+                                </div>
+                                <div class="form-text">清單來源可切換 Mock/Firestore；可由旗標控制是否過濾停用機具</div>
+                            </div>
+
+                            <div class="col-12 d-none" id="multiDriverSection">
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-people me-1"></i>選擇司機（可多選）</span>
+                                    <span class="text-muted small">僅選 1 位時會同步填入「司機姓名」欄位</span>
+                                </label>
+                                <div class="border rounded p-2" style="max-height:200px;overflow:auto;">
+                                    <div class="text-muted small" id="driversLoading">載入中...</div>
+                                    <div class="row g-2" id="driversOptions"></div>
+                                </div>
+                            </div>
+
                             <!-- 全域錯誤訊息 -->
                             <div class="col-12">
                                 <div id="formGlobalError" class="alert alert-danger py-2 px-3 d-none small"></div>
@@ -151,12 +175,90 @@
     </div>
 
     <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
-    <script type="module" src="js/config-flags.js"></script>
+        <script type="module" src="js/config-flags.js?v=20251010"></script>
+        <!-- 頁面層級保險：若快取或多份檔案導致 USE_MOCK_DATA 非預期，這裡強制覆寫為 true -->
+        <script>
+            window.APP_FLAGS = Object.assign({}, window.APP_FLAGS, { USE_MOCK_DATA: true });
+            console.info('[Flags][override@new-delivery] USE_MOCK_DATA =', window.APP_FLAGS?.USE_MOCK_DATA);
+        </script>
     <!-- 離線管理與新增簽單腳本 -->
     <script type="module" src="js/offline.js"></script>
     <script type="module" src="js/new-delivery.js"></script>
     <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
     <script type="module" src="js/auth-guard.js"></script>
-    <script type="module" src="js/tools/seed-drivers.js"></script>
+        <script type="module" src="js/tools/seed-drivers.js"></script>
+        <!-- 先行顯示多選區塊（即使後續 API 匯入失敗，也能看見區塊與載入提示） -->
+            <script type="module">
+                const FLAGS_PRE = window.APP_FLAGS || {};
+            const mm = document.getElementById('multiMachineSection');
+            const md = document.getElementById('multiDriverSection');
+                if (FLAGS_PRE.ENABLE_MULTI_MACHINE) mm?.classList.remove('d-none');
+                if (FLAGS_PRE.ENABLE_MULTI_DRIVER) md?.classList.remove('d-none');
+            // 在 Console 打印旗標，方便排查是否載入正確
+                console.info('[MultiSelect] flags(pre)=', FLAGS_PRE);
+        </script>
+        <!-- 再載入 API 並渲染清單 -->
+            <script type="module">
+                import { listActiveMachines, listAllMachines, listActiveDrivers, listAllDrivers } from './js/api/index.js';
+            const FLAGS = window.APP_FLAGS || {};
+
+            async function renderMachines() {
+                if (!FLAGS.ENABLE_MULTI_MACHINE) return;
+                const wrap = document.getElementById('machinesOptions');
+                const loading = document.getElementById('machinesLoading');
+                if (!wrap) return;
+                loading?.classList.remove('d-none');
+                try {
+                    const useActive = FLAGS.ENABLE_MACHINE_DEACTIVATE_FILTER !== false;
+                    const items = useActive ? await listActiveMachines() : await listAllMachines();
+                    wrap.innerHTML = '';
+                    items.forEach((m) => {
+                        const col = document.createElement('div');
+                        col.className = 'col-12 col-md-6';
+                        col.innerHTML = `
+                            <label class="form-check small">
+                                <input type="checkbox" class="form-check-input" data-id="${m.id}" data-name="${m.name}">
+                                <span class="form-check-label">${m.name}</span>
+                            </label>`;
+                        wrap.appendChild(col);
+                    });
+                } catch (e) {
+                    wrap.innerHTML = `<div class="text-danger small">載入機具失敗：${e.message || e}</div>`;
+                } finally {
+                    loading?.classList.add('d-none');
+                }
+            }
+
+                    async function renderDrivers() {
+                if (!FLAGS.ENABLE_MULTI_DRIVER) return;
+                const wrap = document.getElementById('driversOptions');
+                const loading = document.getElementById('driversLoading');
+                if (!wrap) return;
+                loading?.classList.remove('d-none');
+                try {
+                    const useActive = true; // 司機預設僅顯示 isActive
+                    const items = useActive ? await listActiveDrivers() : await listAllDrivers();
+                    wrap.innerHTML = '';
+                    items.forEach((d) => {
+                        const col = document.createElement('div');
+                        col.className = 'col-12 col-md-6';
+                        col.innerHTML = `
+                            <label class="form-check small">
+                                <input type="checkbox" class="form-check-input" data-id="${d.id}" data-name="${d.displayName}" data-display="${d.displayName}">
+                                <span class="form-check-label">${d.displayName}</span>
+                            </label>`;
+                        wrap.appendChild(col);
+                    });
+                } catch (e) {
+                    wrap.innerHTML = `<div class="text-danger small">載入司機失敗：${e.message || e}</div>`;
+                } finally {
+                    loading?.classList.add('d-none');
+                }
+            }
+
+                    document.addEventListener('DOMContentLoaded', async () => {
+                        await Promise.all([renderMachines(), renderDrivers()]);
+                    });
+        </script>
 </body>
 </html>
