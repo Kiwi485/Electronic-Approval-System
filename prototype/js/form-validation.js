@@ -204,11 +204,30 @@ function wireEvents() {
     // 不在此處綁定 submit，改由 new-delivery.js 主導提交流程
 }
 
+// 旗標與輔助 --------------------------------------------------------------
+function isFlagOn(name, def=false){ try { return window.APP_FLAGS?.[name] ?? def; } catch { return def; } }
+
+function collectSelectedMachines(){
+    if (!isFlagOn('ENABLE_MULTI_MACHINE', false)) return [];
+    const box = document.getElementById('machinesOptions');
+    if (!box) return [];
+    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
+    return checked.map(el => ({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') || '' }));
+}
+
+function collectSelectedDrivers(){
+    if (!isFlagOn('ENABLE_MULTI_DRIVER', false)) return [];
+    const box = document.getElementById('driversOptions');
+    if (!box) return [];
+    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
+    return checked.map(el => ({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') || el.getAttribute('data-display') || '' }));
+}
+
 // 導出（若其他模組需要）
 function buildValidatedPayload() {
     clearGlobalError();
     if (!runFullValidation()) return { ok: false, error: 'VALIDATION_FAILED' };
-    const data = {
+        const data = {
         customer: form.customer.value.trim(),
         date: form.date.value,
         location: form.location.value.trim(),
@@ -225,7 +244,26 @@ function buildValidatedPayload() {
         signatureDataUrl: null,
         signatureStatus: 'pending'
     };
+
+        // 多選欄位（純加欄位，不影響原欄位用法）
+        const machines = collectSelectedMachines();
+        const drivers = collectSelectedDrivers();
+        if (machines.length > 0) data.machines = machines; else if (isFlagOn('ENABLE_MULTI_MACHINE')) data.machines = [];
+        if (drivers.length > 0) data.drivers = drivers; else if (isFlagOn('ENABLE_MULTI_DRIVER')) data.drivers = [];
+
+        // 若僅選一筆，對應回舊欄位（不覆蓋原本輸入值的情況下才賦值）
+        if (machines.length === 1 && (!data.machine || data.machine.trim() === '')) {
+            data.machine = machines[0].name || '';
+        } else if (machines.length > 1) {
+            // 多於 1 筆則保留舊欄位為空字串，以免造成誤導
+            data.machine = '';
+        }
+        if (drivers.length === 1 && (!data.driverName || data.driverName.trim() === '')) {
+            data.driverName = drivers[0].name || '';
+        } else if (drivers.length > 1) {
+            data.driverName = '';
+        }
     return { ok: true, data };
 }
 
-export { calcTotalHours, buildValidatedPayload, getSignatureDataURL };
+export { calcTotalHours, buildValidatedPayload, getSignatureDataURL, collectSelectedMachines, collectSelectedDrivers };
