@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>機具管理</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- 補上圖示套件，讓 <i class="bi ..."> 正常顯示 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
 <style>
   .usage-input {
     width: 80px;
@@ -39,7 +41,17 @@
   }
 </style>
 </head>
-<body class="p-4">
+<body class="px-4 pb-4"></body>
+
+<!-- 新增：頂部導覽列，點擊品牌可回首頁 -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top mb-3">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="index.html">
+      <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
+    </a>
+  </div>
+</nav>
+
 <div class="container">
 <h1 class="mb-4">
   <i class="bi bi-tools"></i> 機具管理
