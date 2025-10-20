@@ -112,7 +112,8 @@
                             <!-- 其他資訊：機具、車號、司機姓名、備註（非必填，可自行調整） -->
                             <div class="col-md-4">
                                 <label for="machine" class="form-label">機具</label>
-                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機">
+                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機" list="machineOptions">
+                                <datalist id="machineOptions"></datalist>
                             </div>
                             <div class="col-md-4">
                                 <label for="vehicleNumber" class="form-label">車號</label>
@@ -152,6 +153,8 @@
 
     <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
     <script type="module" src="js/config-flags.js"></script>
+    <!-- 新增：機具選單 UI（依旗標自動隱藏停用或顯示全部） -->
+    <script type="module" src="js/machines-ui.js"></script>
     <!-- 離線管理與新增簽單腳本 -->
     <script type="module" src="js/offline.js"></script>
     <script type="module" src="js/new-delivery.js"></script>
