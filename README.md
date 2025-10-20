@@ -1062,3 +1062,128 @@ window.APP_FLAGS.USE_MOCK_DATA = true;
 
 
 
+
+---
+
+
+## 🧩 使用 VS Code + Copilot 解決 Merge Conflict 指南
+
+在團隊開發中，如果 main 分支已更新，而你在自己的分支也有修改，  
+當你進行 `git pull`、`git merge` 或 `git rebase` 時，可能會出現 **merge conflict（合併衝突）**。
+
+以下是標準解法與建議流程 👇
+
+---
+
+### ⚙️ 一、更新並切回自己的分支
+```bash
+# 1️⃣ 更新 main 分支
+git checkout main
+git pull origin main
+
+# 2️⃣ 回到自己的分支
+git checkout feature/your-branch-name
+
+# 3️⃣ 把最新 main 合併進來
+git rebase main        #（推薦，歷史乾淨）
+# 或者：
+git merge main         #（操作簡單）
+````
+
+---
+
+### 💥 二、發生 Conflict 時會看到
+
+在 VS Code 裡會自動顯示類似：
+
+```text
+<<<<<<< HEAD
+// 你目前分支的內容
+=======
+// main 分支的內容
+>>>>>>> main
+```
+
+同時上方會出現工具列按鈕：
+
+* `Accept Current Change`（保留你自己的）
+* `Accept Incoming Change`（保留 main 的）
+* `Accept Both Changes`（保留兩邊）
+* `Compare Changes`（對比查看）
+
+---
+
+### 🤖 三、使用 Copilot 協助整合
+
+> **需要安裝 VS Code Insiders + GitHub Copilot Chat 插件**
+
+1️⃣ 開啟衝突檔案
+2️⃣ 打開 Copilot Chat 視窗（快捷鍵：`Ctrl + I` 或 `Ctrl + /`）
+3️⃣ 輸入提示（中英文都可以）：
+
+```
+Explain this merge conflict and suggest a merged version that keeps both changes.
+```
+
+或
+
+```
+幫我整合這段衝突，保留新 main 的修改但不要刪掉我原本的功能。
+```
+
+4️⃣ Copilot 會生成建議合併結果，你可以：
+
+* 點 **Apply Suggestion** 套用
+* 或手動複製貼上覆蓋衝突區塊
+
+---
+
+### 🧪 四、確認與繼續
+
+修完衝突後執行：
+
+```bash
+git add .
+git rebase --continue    # 若你是 rebase
+# 或
+git commit               # 若你是 merge
+```
+
+最後重新測試：
+
+```bash
+npm run dev
+```
+
+確定功能正常後推回遠端：
+
+```bash
+git push origin feature/your-branch-name --force
+```
+
+---
+
+### 💡 五、Tips
+
+| 狀況           | 建議                           |
+| ------------ | ---------------------------- |
+| 衝突只是註解或空格    | 直接用「Accept Both Changes」     |
+| 同一函式邏輯不同     | 用 Copilot 幫你合併後，再自己檢查邏輯      |
+| rebase 太亂、搞錯 | 可用 `git rebase --abort` 回復原狀 |
+| 不想改歷史        | 改用 `git merge main` 即可       |
+
+---
+
+### ✅ 總結
+
+> 每次 main 更新後，記得先拉最新版本、rebase 一次、
+> 用 Copilot 幫忙整合衝突，
+> 測試沒問題再 push，這樣團隊協作會最順。
+
+---
+
+
+
+
+
+
