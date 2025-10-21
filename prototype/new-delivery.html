@@ -62,6 +62,20 @@
                                 <div class="invalid-feedback">請輸入施工地點</div>
                             </div>
 
+                            <!-- 新增：目的、起點、終點（預設非必填） -->
+                            <div class="col-md-12">
+                                <label for="purpose" class="form-label">物品</label>
+                                <input type="text" class="form-control" name="purpose" id="purpose" placeholder="例如：樹木🪵、建材">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="origin" class="form-label">起點</label>
+                                <input type="text" class="form-control" name="origin" id="origin" placeholder="例如：台北市中山區民生東路 123 號">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="destination" class="form-label">終點</label>
+                                <input type="text" class="form-control" name="destination" id="destination" placeholder="例如：新北市新店區中正路 456 號">
+                            </div>
+
                             <div class="col-md-12">
                                 <label for="work" class="form-label">作業狀況</label>
                                 <textarea class="form-control" rows="3" name="work" id="work" placeholder="描述作業內容..."></textarea>
