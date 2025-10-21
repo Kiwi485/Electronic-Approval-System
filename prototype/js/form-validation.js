@@ -212,6 +212,12 @@ function buildValidatedPayload() {
         customer: form.customer.value.trim(),
         date: form.date.value,
         location: form.location.value.trim(),
+
+        // 新增三個欄位（預設非必填）
+        purpose: form.purpose ? form.purpose.value.trim() : '',
+        origin: form.origin ? form.origin.value.trim() : '',
+        destination: form.destination ? form.destination.value.trim() : '',
+
         work: form.work.value.trim(),
         startTime: startTimeEl.value,
         endTime: endTimeEl.value,
