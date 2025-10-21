@@ -62,3 +62,4 @@ pubsub-debug.log
 
 # Embedded/inner git repositories (prevent accidental submodules)
 prototype/Electronic-Approval-System/
+Electronic-Approval-System/

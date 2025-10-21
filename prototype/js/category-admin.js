@@ -1,6 +1,5 @@
-// category-admin.js - 機具類別管理（Firestore + Mock）
-import { db } from '../firebase-init.js';
-import { collection, addDoc, getDocs, updateDoc, doc, serverTimestamp, query, orderBy } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+// category-admin.js - 機具類別管理（透過 API 層）
+import { listCategories, createCategory, updateCategory, getApiSource } from './api/index.js';
 
 const USE_MOCK = window.APP_FLAGS?.USE_MOCK_DATA === true;
 
@@ -41,36 +40,26 @@ function resetForm() {
   editForm.querySelectorAll('.is-invalid').forEach(x => x.classList.remove('is-invalid'));
 }
 
-// ---- Repository（Firestore / Mock）----
-class MockRepo {
-  constructor() { this.items = []; this.idSeq = 1; }
-  async list() { return this.items.slice().sort((a,b)=> (a.order||0)-(b.order||0) || a.name.localeCompare(b.name)); }
-  async add({ name, active, order }) {
-    const item = { id: 'm' + (this.idSeq++), name, active, order: Number(order)||0, createdAt: new Date().toISOString() };
-    this.items.push(item); return item;
-  }
-  async update(id, patch) { const it = this.items.find(x=>x.id===id); if (it) Object.assign(it, patch); return it; }
-}
-
-class FsRepo {
-  coll() { return collection(db, 'categories'); }
-  async list() {
-    const qy = query(this.coll(), orderBy('order','asc'), orderBy('name','asc'));
-    const snap = await getDocs(qy);
-    const list = [];
-    snap.forEach(docu => list.push({ id: docu.id, ...docu.data() }));
-    return list;
-  }
-  async add({ name, active, order }) {
-    const payload = { name, active: !!active, order: Number(order)||0, createdAt: serverTimestamp() };
-    const ref = await addDoc(this.coll(), payload); return { id: ref.id, ...payload };
-  }
-  async update(id, patch) { await updateDoc(doc(db, 'categories', id), patch); return true; }
-}
-
-const repo = USE_MOCK ? new MockRepo() : new FsRepo();
+// 由 API 層負責切換 Mock/Firestore
 
 // ---- UI Render ----
+function toDateStr(v) {
+  if (!v) return '-';
+  try {
+    if (typeof v.toDate === 'function') {
+      // Firestore Timestamp
+      v = v.toDate();
+    }
+    if (v instanceof Date) {
+      return v.toISOString().split('T')[0];
+    }
+    if (typeof v === 'string') {
+      return v.split('T')[0];
+    }
+  } catch {}
+  return '-';
+}
+
 function renderRows(items) {
   tableBody.innerHTML = '';
   if (!items || items.length === 0) {
@@ -80,12 +69,12 @@ function renderRows(items) {
   }
   for (const it of items) {
     const tr = document.createElement('tr');
-    const created = it.createdAt?.toDate ? it.createdAt.toDate().toISOString() : (it.createdAt || '-');
+    const created = toDateStr(it.createdAt);
     tr.innerHTML = `
       <td>${escapeHtml(it.name || '')}</td>
       <td>${it.active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
       <td>${Number(it.order)||0}</td>
-      <td class="small text-muted">${created ? created.split('T')[0] : '-'}</td>
+      <td class="small text-muted">${created}</td>
       <td>
         <div class="btn-group btn-group-sm">
           <button class="btn btn-outline-primary" data-action="edit" data-id="${it.id}"><i class="bi bi-pencil"></i> 編輯</button>
@@ -105,7 +94,7 @@ function escapeHtml(s) {
 async function refresh() {
   try {
     showError(pageError, '');
-    const list = await repo.list();
+    const list = await listCategories();
     renderRows(list);
   } catch (e) { showError(pageError, '載入失敗：' + e.message); }
 }
@@ -136,7 +125,7 @@ tableBody?.addEventListener('click', async (e) => {
       // 反轉狀態
       const tr = btn.closest('tr');
       const nowActive = tr.children[1].textContent.includes('啟用');
-      await repo.update(id, { active: !nowActive });
+      await updateCategory(id, { active: !nowActive });
       await refresh();
     }
   } catch (err) { alert('操作失敗：' + err.message); }
@@ -151,9 +140,9 @@ btnSave?.addEventListener('click', async () => {
   if (!name) { catNameEl.classList.add('is-invalid'); return; }
   try {
     if (id) {
-      await repo.update(id, { name, order, active });
+      await updateCategory(id, { name, order, active });
     } else {
-      await repo.add({ name, order, active });
+      await createCategory({ name, order, active });
     }
     bsModal?.hide();
     await refresh();
@@ -161,6 +150,6 @@ btnSave?.addEventListener('click', async () => {
 });
 
 // ---- Init ----
-modeBadge.textContent = USE_MOCK ? 'Mock 模式' : 'Firestore 模式';
+modeBadge.textContent = (getApiSource?.() === 'mock') ? 'Mock 模式' : 'Firestore 模式';
 modeBadge.className = 'badge ' + (USE_MOCK ? 'bg-secondary' : 'bg-success');
 refresh();

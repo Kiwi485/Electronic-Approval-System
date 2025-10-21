@@ -1,38 +1,20 @@
 # 智慧簽單及派工系統 (Electronic-Approval-System)
 
-智慧簽單及派工系統，支援精準工時計算、彈性機具管理、多平台離線/同步功能。  
-前端採用 **Firebase Web SDK**，後端採用 **Firebase**（Authentication, Firestore, Storage, Functions, Hosting, Messaging）。
 
----
 
-## 🎯 專案狀態
 ✅ **Firebase 環境已就緒** - Auth, Firestore, Storage, Emulator 已設定完成  
 ✅ **資料流程已驗證** - deliveryNotes 能成功寫入 Firestore  
 🚧 **開發進行中** - 4 個核心功能正在實作  
-
----
-
 ## ✨ 主要特色
 - **工時計算**：記錄開始/結束時間，自動計算總工時（支援跨日與小數表示）。
-- **機具管理**：支援多選機具、臨時新增機具、後台維護與使用率統計。
 - **記錄完整性**：簽單包含日期、客戶、施工地點、作業狀況、車號、司機、金額、備註、客戶簽章等欄位。
 - **離線支援**：行動裝置可離線填寫簽單，網路恢復後自動同步。
-- **即時通知**：整合 Firebase Cloud Messaging，發送新工作與狀態更新通知。
-
----
-
-## ✅ 環境驗收標準
 - Emulator UI 能看到 Firestore/Auth/Storage 服務  
 - 填寫表單送出後，`deliveryNotes` collection 出現新資料  
-- Browser Console 沒有 Firebase 連接錯誤  
 - 能正常在不同頁面間導航  
 
 ---
 
-## 📋 當前開發任務（Sprint 1）
-🎯 **目標**：完成端到端 Demo  
-⏳ **時程**：3–5 天  
-🏆 **成功標準**：能錄製 1 分鐘影片展示「登入 → 填表 → 簽名 → 送出 → History 查看」  
 
 | Issue | 功能                 | 負責人 | 狀態       | 檔案                          |
 |-------|----------------------|--------|------------|-------------------------------|
@@ -48,7 +30,7 @@
 1. 開啟 `http://localhost:3000/new-delivery.html`  
 2. 填寫表單各欄位  
 3. 點擊「完成簽單」  
-4. 檢查 Emulator UI (`http://localhost:4000`) → Firestore → `deliveryNotes`  
+4. 檢查 Emulator UI (`http://127.0.0.1:4450`) → Firestore → `deliveryNotes`  
 5. 確認新資料出現且格式正確  
 
 ### 整合測試
@@ -70,11 +52,13 @@ cd Electronic-Approval-System
 
 # 2. 啟動 Firebase Emulator  
 firebase emulators:start
-# 🔗 Emulator UI: http://localhost:4000
+# 🔗 Emulator UI: http://127.0.0.1:4450
 
 # 3. 啟動前端（另開 PowerShell 視窗）
-npx http-server .\prototype -p 3000
-# 🔗 前端: http://localhost:3000/new-delivery.html
+# 推薦：帶旗標以啟用 CORS/GZIP/Brotli 與預設副檔名
+npx http-server .\prototype -p 3000 -a 0.0.0.0 -c-1 --cors --gzip --brotli -e html
+# 或使用腳本：scripts\start_http_3000.bat
+# 🔗 前端: http://localhost:3000/new-delivery.html?emu=1
 
 
 了解 👍 你要的是把 **所有 FAQ 的問題與答案** 完整收錄成 **Markdown Q\&A 文件**。以下是整理好的版本：
