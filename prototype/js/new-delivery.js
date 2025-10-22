@@ -9,6 +9,9 @@ console.log('🚀 new-delivery.js 已載入');
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
 
+// 依旗標決定是否走 Mock 寫入（不修改 config-flags.js 結構）
+const SHOULD_USE_MOCK = (window.APP_FLAGS?.USE_MOCK_DATA ?? true) === true;
+
 async function submitOnline(data) {
   const payload = { ...data, offline: false, serverCreatedAt: serverTimestamp() };
   const docRef = await addDoc(collection(db, 'deliveryNotes'), payload);
@@ -43,6 +46,36 @@ form?.addEventListener('submit', async (e) => {
     submitBtn.disabled = false;
     submitBtn.innerHTML = originalText;
   };
+
+  // Mock 模式：直接寫入 mock 報表資料（不呼叫 Firestore）
+  if (SHOULD_USE_MOCK) {
+    try {
+      const reportRow = {
+        id: data.localId,
+        localId: data.localId,
+        date: (new Date()).toISOString().slice(0,10),
+        customer: data.customer || data.customerName || '',
+        item: data.item || '',
+        origin: data.origin || '',
+        destination: data.destination || '',
+        quantity: Number(data.quantity) || 0,
+        unit: data.unit || '',
+        amount: Number(data.amount) || 0,
+        receivedCash: !!data.paidAt,
+        paidAt: data.paidAt || null,
+        modelName: data.modelName || data.machineName || '',
+        driverName: data.driverName || data.driver || '',
+        vehicleNumber: data.vehicleNumber || data.vehicle || ''
+      };
+      const mod = await import('./reports-mock-data.js');
+      const ok = mod.saveMockReportRow(reportRow);
+      finish(ok, ok ? '已以 Mock 模式建立並儲存單據（可在報表看到）' : 'Mock 儲存發生問題，但表單仍已處理');
+    } catch (err) {
+      console.warn('[Mock] 無法儲存 mock 單據', err);
+      finish(false, 'Mock 儲存失敗');
+    }
+    return;
+  }
 
   if (!navigator.onLine) {
     offlineManager.saveOfflineData(data);
