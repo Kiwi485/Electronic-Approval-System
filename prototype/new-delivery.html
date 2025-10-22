@@ -62,6 +62,20 @@
                                 <div class="invalid-feedback">請輸入施工地點</div>
                             </div>
 
+                            <!-- 新增：目的、起點、終點（預設非必填） -->
+                            <div class="col-md-12">
+                                <label for="purpose" class="form-label">物品</label>
+                                <input type="text" class="form-control" name="purpose" id="purpose" placeholder="例如：樹木🪵、建材">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="origin" class="form-label">起點</label>
+                                <input type="text" class="form-control" name="origin" id="origin" placeholder="例如：台北市中山區民生東路 123 號">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="destination" class="form-label">終點</label>
+                                <input type="text" class="form-control" name="destination" id="destination" placeholder="例如：新北市新店區中正路 456 號">
+                            </div>
+
                             <div class="col-md-12">
                                 <label for="work" class="form-label">作業狀況</label>
                                 <textarea class="form-control" rows="3" name="work" id="work" placeholder="描述作業內容..."></textarea>
@@ -112,7 +126,8 @@
                             <!-- 其他資訊：機具、車號、司機姓名、備註（非必填，可自行調整） -->
                             <div class="col-md-4">
                                 <label for="machine" class="form-label">機具</label>
-                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機">
+                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機" list="machineOptions">
+                                <datalist id="machineOptions"></datalist>
                             </div>
                             <div class="col-md-4">
                                 <label for="vehicleNumber" class="form-label">車號</label>
@@ -150,10 +165,15 @@
         </div>
     </div>
 
+    <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
+    <script type="module" src="js/config-flags.js"></script>
+    <!-- 新增：機具選單 UI（依旗標自動隱藏停用或顯示全部） -->
+    <script type="module" src="js/machines-ui.js"></script>
     <!-- 離線管理與新增簽單腳本 -->
     <script type="module" src="js/offline.js"></script>
     <script type="module" src="js/new-delivery.js"></script>
     <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
     <script type="module" src="js/auth-guard.js"></script>
+    <script type="module" src="js/tools/seed-drivers.js"></script>
 </body>
 </html>
