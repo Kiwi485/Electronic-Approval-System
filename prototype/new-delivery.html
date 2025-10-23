@@ -126,8 +126,9 @@
                             <!-- 其他資訊：機具、車號、司機姓名、備註（非必填，可自行調整） -->
                             <div class="col-md-4">
                                 <label for="machine" class="form-label">機具</label>
-                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機" list="machineOptions">
-                                <datalist id="machineOptions"></datalist>
+                                <select class="form-select" name="machine" id="machine">
+                                    <option value="">— 選擇機具 —</option>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label for="vehicleNumber" class="form-label">車號</label>
@@ -135,7 +136,9 @@
                             </div>
                             <div class="col-md-4">
                                 <label for="driverName" class="form-label">司機姓名</label>
-                                <input type="text" class="form-control" name="driverName" id="driverName" placeholder="司機">
+                                <select class="form-select" name="driverName" id="driverName">
+                                    <option value="">— 選擇司機 —</option>
+                                </select>
                             </div>
                             <div class="col-md-12">
                                 <label for="remark" class="form-label">備註</label>
@@ -165,10 +168,14 @@
         </div>
     </div>
 
-    <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
-    <script type="module" src="js/config-flags.js"></script>
+        <!-- 旗標需最先載入以便 API 動態選擇資料來源（動態引入以避免快取） -->
+        <script type="module">
+            import(`./js/config-flags.js?v=${Date.now()}`);
+        </script>
     <!-- 新增：機具選單 UI（依旗標自動隱藏停用或顯示全部） -->
-    <script type="module" src="js/machines-ui.js"></script>
+    <script type="module" src="js/machines-ui.js?v=20251022"></script>
+    <!-- 新增：司機選單 UI（支援 mock/Firestore 與閃斷線 fallback） -->
+    <script type="module" src="js/drivers-ui.js?v=20251022"></script>
     <!-- 離線管理與新增簽單腳本 -->
     <script type="module" src="js/offline.js"></script>
     <script type="module" src="js/new-delivery.js"></script>
