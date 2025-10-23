@@ -2,7 +2,7 @@
 // 可依開發 / 測試 / 上線調整。後續若導入更正式的設定，可改由 Firestore Remote Config 或環境檔。
 window.APP_FLAGS = {
   // 使用 mock 資料 (true) 或真實 Firestore (false)
-  USE_MOCK_DATA: true,
+  USE_MOCK_DATA: false,
   // 是否啟用多機具 UI 與 payload 寫入 machines[]
   ENABLE_MULTI_MACHINE: true,
   // 是否啟用多司機 UI 與 payload 寫入 drivers[]

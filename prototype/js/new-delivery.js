@@ -30,6 +30,7 @@ form?.addEventListener('submit', async (e) => {
     localId: crypto.randomUUID(),
     ...baseData,
     signatureStatus: baseData.signatureStatus || 'pending',
+    paidAt: null,
     createdAt: new Date().toISOString()
   };
   submitBtn.disabled = true;
