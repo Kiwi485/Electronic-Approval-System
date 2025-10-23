@@ -2,7 +2,7 @@
 // 可依開發 / 測試 / 上線調整。後續若導入更正式的設定，可改由 Firestore Remote Config 或環境檔。
 window.APP_FLAGS = {
   // 使用 mock 資料 (true) 或真實 Firestore (false)
-  USE_MOCK_DATA: false,
+  USE_MOCK_DATA: true,
   // 是否啟用多機具 UI 與 payload 寫入 machines[]
   ENABLE_MULTI_MACHINE: true,
   // 是否啟用多司機 UI 與 payload 寫入 drivers[]
@@ -21,7 +21,8 @@ console.info('[Flags] Loaded APP_FLAGS =', window.APP_FLAGS);
 // ---- Runtime override：Console 可獨立於 APP_FLAGS 控制來源（支援跨刷新持久化） ----
 const __LS_KEY = 'app.runtime.forceApiSource';
 let __persisted = null;
-try { __persisted = localStorage.getItem(__LS_KEY); } catch {}
+// 首次開啟以 config 為準：覆寫僅在「本瀏覽器分頁工作階段」內有效
+try { __persisted = sessionStorage.getItem(__LS_KEY); } catch {}
 if (__persisted !== 'mock' && __persisted !== 'firestore') __persisted = null;
 window.APP_RUNTIME = window.APP_RUNTIME || { FORCE_API_SOURCE: __persisted }; // 'mock' | 'firestore' | null
 
@@ -38,9 +39,9 @@ window.setApiSource = function setApiSource(src /* 'mock' | 'firestore' | null *
   window.APP_RUNTIME.FORCE_API_SOURCE = src;
   try {
     if (src === null) {
-      localStorage.removeItem(__LS_KEY);
+      sessionStorage.removeItem(__LS_KEY);
     } else {
-      localStorage.setItem(__LS_KEY, src);
+      sessionStorage.setItem(__LS_KEY, src);
     }
   } catch {}
   console.info('[Flags] RUNTIME API SOURCE =>', src ?? '(follow config)');
