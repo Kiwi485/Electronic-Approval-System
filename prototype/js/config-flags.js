@@ -2,7 +2,7 @@
 // 可依開發 / 測試 / 上線調整。後續若導入更正式的設定，可改由 Firestore Remote Config 或環境檔。
 window.APP_FLAGS = {
   // 使用 mock 資料 (true) 或真實 Firestore (false)
-  USE_MOCK_DATA: true,
+  USE_MOCK_DATA: false,
   // 是否啟用多機具 UI 與 payload 寫入 machines[]
   ENABLE_MULTI_MACHINE: true,
   // 是否啟用多司機 UI 與 payload 寫入 drivers[]
@@ -18,13 +18,20 @@ window.APP_FLAGS = {
 
 console.info('[Flags] Loaded APP_FLAGS =', window.APP_FLAGS);
 
-// ---- Runtime override：Console 可獨立於 APP_FLAGS 控制來源（支援跨刷新持久化） ----
-const __LS_KEY = 'app.runtime.forceApiSource';
-let __persisted = null;
-// 首次開啟以 config 為準：覆寫僅在「本瀏覽器分頁工作階段」內有效
-try { __persisted = sessionStorage.getItem(__LS_KEY); } catch {}
-if (__persisted !== 'mock' && __persisted !== 'firestore') __persisted = null;
-window.APP_RUNTIME = window.APP_RUNTIME || { FORCE_API_SOURCE: __persisted }; // 'mock' | 'firestore' | null
+// ---- Persisted flag override for USE_MOCK_DATA（跨重整保留） ----
+// 若你在 Console 改了 APP_FLAGS.USE_MOCK_DATA，我們會記錄到 localStorage，重整後沿用。
+// 可呼叫 window.clearUseMockPersist() 清除並回到原始 config。
+const __FLAG_KEY = 'app.flags.USE_MOCK_DATA';
+try {
+  const persisted = localStorage.getItem(__FLAG_KEY);
+  if (persisted === 'true' || persisted === 'false') {
+    window.APP_FLAGS.USE_MOCK_DATA = (persisted === 'true');
+    console.info('[Flags] USE_MOCK_DATA loaded from storage =>', window.APP_FLAGS.USE_MOCK_DATA);
+  }
+} catch {}
+
+// ---- Runtime override：Console 可獨立於 APP_FLAGS 控制來源（不持久化；重載後回到 config） ----
+window.APP_RUNTIME = window.APP_RUNTIME || { FORCE_API_SOURCE: null }; // 'mock' | 'firestore' | null
 
 function emit(type, detail) {
   try { window.dispatchEvent(new CustomEvent(type, { detail })); } catch {}
@@ -37,14 +44,7 @@ window.setApiSource = function setApiSource(src /* 'mock' | 'firestore' | null *
     src = null;
   }
   window.APP_RUNTIME.FORCE_API_SOURCE = src;
-  try {
-    if (src === null) {
-      sessionStorage.removeItem(__LS_KEY);
-    } else {
-      sessionStorage.setItem(__LS_KEY, src);
-    }
-  } catch {}
-  console.info('[Flags] RUNTIME API SOURCE =>', src ?? '(follow config)');
+  console.info('[Flags] RUNTIME API SOURCE =>', src ?? '(follow config)', '| persist=none (reload follows config)');
   emit('apisourcechange', { source: src });
 };
 
@@ -65,10 +65,6 @@ window.setUseMockData = function setUseMockData(v) {
   window.APP_FLAGS.USE_MOCK_DATA = v === true;
   console.info('[Flags] USE_MOCK_DATA =>', window.APP_FLAGS.USE_MOCK_DATA);
   dispatchFlagsChange('USE_MOCK_DATA');
-  // 讓以 APP_FLAGS 設值也能直接影響實際來源（同你在 Console 的預期用法）
-  if (window.setApiSource) {
-    window.setApiSource(window.APP_FLAGS.USE_MOCK_DATA ? 'mock' : 'firestore');
-  }
 };
 
 window.toggleMock = function toggleMock() {
@@ -103,9 +99,8 @@ window.setMachineFilterEnabled = function setMachineFilterEnabled(v) {
         set(v) {
           _val = v;
           notify(key, _val);
-          if (key === 'USE_MOCK_DATA' && window.setApiSource) {
-            // 讓直接寫 APP_FLAGS.USE_MOCK_DATA 也能切換來源
-            window.setApiSource(_val ? 'mock' : 'firestore');
+          if (key === 'USE_MOCK_DATA') {
+            try { localStorage.setItem(__FLAG_KEY, String(!!_val)); } catch {}
           }
         },
         configurable: true,
@@ -116,3 +111,8 @@ window.setMachineFilterEnabled = function setMachineFilterEnabled(v) {
     }
   });
 })();
+
+// 便利清除方法：回到原始 config（下次重整不再套用儲存值）
+window.clearUseMockPersist = function clearUseMockPersist() {
+  try { localStorage.removeItem(__FLAG_KEY); console.info('[Flags] Cleared persisted USE_MOCK_DATA'); } catch {}
+};
