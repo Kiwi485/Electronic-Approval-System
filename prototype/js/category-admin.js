@@ -68,14 +68,22 @@ const iptOrder = document.getElementById('categoryOrder');
 const iptActive = document.getElementById('categoryActive');
 const btnSave = document.getElementById('btnSave');
 
-const useMock = !!window.APP_FLAGS?.USE_MOCK_DATA;
-const repo = useMock ? new MockRepo() : new FsRepo(db);
-modeBadge.textContent = useMock ? 'Mock 模式' : 'Firestore 模式';
-modeBadge.classList.toggle('bg-secondary', useMock);
-modeBadge.classList.toggle('bg-success', !useMock);
+// 決定是否使用 mock：在 runtime 讀取 flags（避免模組載入時被鎖定）
+function isMock() { return window.APP_FLAGS?.USE_MOCK_DATA === true; }
+const mockRepoInstance = new MockRepo();
+const fsRepoInstance = new FsRepo(db);
+function getRepo() { return isMock() ? mockRepoInstance : fsRepoInstance; }
+function updateModeBadge() {
+  if (!modeBadge) return;
+  const useMockNow = isMock();
+  modeBadge.textContent = useMockNow ? 'Mock 模式' : 'Firestore 模式';
+  modeBadge.classList.toggle('bg-secondary', useMockNow);
+  modeBadge.classList.toggle('bg-success', !useMockNow);
+}
 
 async function refresh() {
-  const rows = await repo.list();
+  updateModeBadge();
+  const rows = await getRepo().list();
   tbody.innerHTML = '';
   for (const r of rows) {
     const tr = document.createElement('tr');
@@ -99,7 +107,7 @@ async function refresh() {
   tbody.querySelectorAll('.toggle-active').forEach(el=>{
     el.addEventListener('change', async (e)=>{
       const id = e.currentTarget.dataset.id;
-      await repo.update(id, { isActive: e.currentTarget.checked });
+      await getRepo().update(id, { isActive: e.currentTarget.checked });
       // 即時刷新
       await refresh();
     });
@@ -107,7 +115,7 @@ async function refresh() {
   tbody.querySelectorAll('.btn-edit').forEach(el=>{
     el.addEventListener('click', async (e)=>{
       const id = e.currentTarget.dataset.id;
-      const list = await repo.list();
+      const list = await getRepo().list();
       const found = list.find(x=>x.id===id);
       if (!found) return;
       iptId.value = found.id;
@@ -136,9 +144,9 @@ btnSave.addEventListener('click', async ()=>{
   const isActive = !!iptActive.checked;
   if (!name) { alert('請輸入名稱'); return; }
   if (id) {
-    await repo.update(id, { name, order, isActive });
+    await getRepo().update(id, { name, order, isActive });
   } else {
-    await repo.add({ name, order, isActive });
+    await getRepo().add({ name, order, isActive });
   }
   modal.hide();
   await refresh();

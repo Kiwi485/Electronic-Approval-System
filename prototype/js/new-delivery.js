@@ -3,14 +3,22 @@ import { db } from '../firebase-init.js';
 import { buildValidatedPayload } from './form-validation.js';
 import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { offlineManager } from './offline.js';
+import { getApiSource } from './api/index.js';
 
 console.log('🚀 new-delivery.js 已載入');
 
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
 
-// 依旗標決定是否走 Mock 寫入（不修改 config-flags.js 結構）
-const SHOULD_USE_MOCK = (window.APP_FLAGS?.USE_MOCK_DATA ?? true) === true;
+async function waitForFlags(timeout = 1000) {
+  const start = Date.now();
+  while (typeof window.APP_FLAGS === 'undefined' && (Date.now() - start) < timeout) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return window.APP_FLAGS;
+}
+
+// 不在模組載入時就決定 mock/firestore（避免 config 仍在載入時被鎖定）
 
 async function submitOnline(data) {
   const payload = { ...data, offline: false, serverCreatedAt: serverTimestamp() };
@@ -22,6 +30,8 @@ async function submitOnline(data) {
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!submitBtn) return;
+  // 確保 flags 已讀取，避免 race condition
+  try { await waitForFlags(1200); } catch {}
   // 向驗證模組取得驗證後 payload
   const v = buildValidatedPayload();
   if (!v.ok) {
@@ -47,8 +57,27 @@ form?.addEventListener('submit', async (e) => {
     submitBtn.innerHTML = originalText;
   };
 
+  // 於送出時決定目前 API 來源（避免模組載入時 flag 尚未就緒造成誤判）
+  const srcNow = (typeof getApiSource === 'function') ? getApiSource() : (window.APP_FLAGS?.USE_MOCK_DATA ? 'mock' : 'firestore');
+  const shouldUseMock = srcNow === 'mock';
+  console.info('[Delivery] submit-time flags snapshot:', { APP_FLAGS: window.APP_FLAGS, srcNow });
+
   // Mock 模式：直接寫入 mock 報表資料（不呼叫 Firestore）
-  if (SHOULD_USE_MOCK) {
+  if (shouldUseMock) {
+    // double-check runtime source; if flags/state disagree, avoid accidentally using mock
+    if (srcNow !== 'mock') {
+      console.warn('[Delivery] mock branch requested but runtime source is', srcNow, '— falling back to Firestore submit to avoid accidental mock write');
+      try {
+        const realId = await submitOnline(data);
+        finish(true, '完成簽單成功！');
+        return;
+      } catch (err) {
+        console.error('[Delivery] fallback Firestore submit failed after mock-branch guard', err);
+        offlineManager.saveOfflineData(data);
+        finish(false, '網路/伺服器問題，資料已暫存離線稍後同步。');
+        return;
+      }
+    }
     try {
       const reportRow = {
         id: data.localId,
@@ -69,10 +98,10 @@ form?.addEventListener('submit', async (e) => {
       };
       const mod = await import('./reports-mock-data.js');
       const ok = mod.saveMockReportRow(reportRow);
-      finish(ok, ok ? '已以 Mock 模式建立並儲存單據（可在報表看到）' : 'Mock 儲存發生問題，但表單仍已處理');
+      finish(ok, ok ? '完成簽單成功！' : '儲存發生問題，但表單仍已處理');
     } catch (err) {
       console.warn('[Mock] 無法儲存 mock 單據', err);
-      finish(false, 'Mock 儲存失敗');
+        finish(false, '儲存失敗');
     }
     return;
   }
