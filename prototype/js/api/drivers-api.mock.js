@@ -47,6 +47,20 @@ let _drivers = [
   }
 ];
 
+// managers mock data
+let _managers = [
+  {
+    id: 'u-manager',
+    displayName: '系統經理',
+    role: 'manager',
+    isActive: true,
+    email: 'manager@example.com',
+    phone: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
 const delay = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 
 export async function listActiveDrivers() {
@@ -57,6 +71,16 @@ export async function listActiveDrivers() {
 export async function listAllDrivers() {
   await delay();
   return _drivers.map((d) => ({ ...d }));
+}
+
+export async function listActiveManagers() {
+  await delay();
+  return _managers.filter(m => m.isActive).map(m => ({ ...m }));
+}
+
+export async function listAllManagers() {
+  await delay();
+  return _managers.map(m => ({ ...m }));
 }
 
 /**

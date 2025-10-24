@@ -50,6 +50,9 @@ export const listAllDrivers    = (...a) => d().listAllDrivers(...a);
 export const createDriver      = (...a) => d().createDriver(...a);
 export const updateDriver      = (...a) => d().updateDriver(...a);
 export const deleteDriver      = (...a) => d().deleteDriver(...a);
+// managers (users with role=='manager') — 轉發到 drivers module 實作（drivers-api.* 使用 users collection）
+export const listActiveManagers = (...a) => d().listActiveManagers ? d().listActiveManagers(...a) : Promise.resolve([]);
+export const listAllManagers    = (...a) => d().listAllManagers ? d().listAllManagers(...a) : Promise.resolve([]);
 
 // 簽單（deliveryNotes）API ------------------------------------------------------
 export const createDelivery            = (...a) => dn().createDelivery(...a);

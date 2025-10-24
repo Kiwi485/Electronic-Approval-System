@@ -13,6 +13,9 @@ import {
   setDoc
 } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 
+// 載入時記錄（方便確認是否為最新模組）
+console.info('[Seed module loaded]', new Date().toISOString());
+
 // ---- 可調整資料 --------------------------------------------------
 const seedCategories = [
   { id: 'excavator', name: '挖土機', isActive: true, order: 10 },
@@ -27,9 +30,14 @@ const seedMachines = [
 ];
 
 const seedDrivers = [
-  { id: 'u-wang', displayName: '王小明', role: 'driver', isActive: true },
-  { id: 'u-lee', displayName: '李阿華', role: 'driver', isActive: true },
-  { id: 'u-retire', displayName: '退休師傅', role: 'driver', isActive: false }
+  { id: 'u-wang', displayName: '王小明', email: 'wang@example.test', role: 'driver', isActive: true },
+  { id: 'u-lee', displayName: '李阿華', email: 'lee@example.test', role: 'driver', isActive: true },
+  { id: 'u-retire', displayName: '退休師傅', email: 'retire@example.test', role: 'driver', isActive: false }
+];
+
+// 單一 manager（用來測試不同 email 登入會看到不同功能）
+const seedManagers = [
+  { id: 'u-manager', displayName: '系統經理', email: 'manager@example.test', role: 'manager', isActive: true }
 ];
 // -----------------------------------------------------------------
 
@@ -37,11 +45,18 @@ async function ensureDoc(path, data, batch, force=false) {
   const ref = doc(db, path);
   if (!force) {
     const snap = await getDoc(ref);
-    if (snap.exists()) return false;
+    if (snap.exists()) {
+      console.info('[Seed] skip (exists)', path, 'id=', ref.id);
+      return false;
+    }
   }
   const now = serverTimestamp();
+  // 確保 users 文件包含 uid 欄位（使用傳入的 uid 或 doc id）
+  const docId = ref.id;
+  console.info('[Seed] queue set', path, 'uid=', data.uid || data.id || docId);
   batch.set(ref, {
     ...data,
+    uid: data.uid || data.id || docId,
     createdAt: now,
     updatedAt: now,
     usageCount: data.usageCount ?? 0,
@@ -56,14 +71,19 @@ async function ensureDoc(path, data, batch, force=false) {
  */
 export async function seedAll(options = {}) {
   const { force = false } = options;
+  console.info('[Seed] seedAll start', { force, seedData: getSeedData() });
   const batch = writeBatch(db);
-  let created = { categories: 0, machines: 0, drivers: 0, force };
+  let created = { categories: 0, machines: 0, drivers: 0, managers: 0, force };
 
   for (const c of seedCategories) {
     if (await ensureDoc(`machineCategories/${c.id}`, c, batch, force)) created.categories++;
   }
   for (const m of seedMachines) {
     if (await ensureDoc(`machines/${m.id}`, m, batch, force)) created.machines++;
+  }
+  // managers（先寫 managers）
+  for (const mg of (seedManagers || [])) {
+    if (await ensureDoc(`users/${mg.id}`, mg, batch, force)) created.managers++;
   }
   for (const d of seedDrivers) {
     if (await ensureDoc(`users/${d.id}`, d, batch, force)) created.drivers++;
@@ -75,7 +95,7 @@ export async function seedAll(options = {}) {
 }
 
 export function getSeedData() {
-  return { seedCategories, seedMachines, seedDrivers };
+  return { seedCategories, seedMachines, seedDrivers, seedManagers };
 }
 
 // 如果想快速在 Console 一鍵呼叫，可取消下行註解：
