@@ -1,0 +1,226 @@
+import { listAllDrivers, createDriver, updateDriver, deleteDriver } from './api/index.js';
+
+const tableBody = document.querySelector('#driverTable tbody');
+const alertBox = document.getElementById('alertBox');
+const addBtn = document.getElementById('addDriverBtn');
+const modalEl = document.getElementById('driverModal');
+const form = document.getElementById('driverForm');
+const modalTitle = document.getElementById('modalTitle');
+
+const nameInput = document.getElementById('driverName');
+const emailInput = document.getElementById('driverEmail');
+const phoneInput = document.getElementById('driverPhone');
+const licenseInput = document.getElementById('driverLicense');
+const activeInput = document.getElementById('driverActive');
+const saveBtn = document.getElementById('saveBtn');
+const savingSpinner = document.getElementById('savingSpinner');
+
+const modal = new bootstrap.Modal(modalEl);
+let driversCache = [];
+let editingId = null;
+
+function showAlert(message, variant = 'danger', duration = 2600) {
+  alertBox.textContent = message;
+  alertBox.className = `alert alert-${variant} alert-floating`;
+  alertBox.classList.remove('d-none');
+
+  if (duration > 0) {
+    setTimeout(() => alertBox.classList.add('d-none'), duration);
+  }
+}
+
+function hideAlert() {
+  alertBox.classList.add('d-none');
+}
+
+function normalizeOptional(value) {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function renderStatusBadge(isActive) {
+  return isActive
+    ? '<span class="badge bg-success">啟用</span>'
+    : '<span class="badge bg-secondary">停用</span>';
+}
+
+function renderTable(drivers) {
+  if (!drivers.length) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center text-muted py-4">
+          尚無司機資料，請點選「新增司機」新增一筆。
+        </td>
+      </tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = drivers
+    .map((driver) => `
+      <tr data-driver-id="${driver.id}">
+        <td>
+          <div class="fw-semibold">${driver.displayName || '-'}</div>
+          <div class="text-muted small">ID: ${driver.id}</div>
+        </td>
+        <td><span class="badge bg-info text-dark">driver</span></td>
+        <td>${renderStatusBadge(driver.isActive)}</td>
+        <td>${driver.email ?? '—'}</td>
+        <td>${driver.phone ?? '—'}</td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary edit-btn" data-id="${driver.id}">
+              <i class="bi bi-pencil-square me-1"></i>編輯
+            </button>
+            <button class="btn btn-outline-${driver.isActive ? 'warning' : 'success'} toggle-btn" data-id="${driver.id}">
+              <i class="bi ${driver.isActive ? 'bi-slash-circle' : 'bi-check-circle'} me-1"></i>${driver.isActive ? '停用' : '啟用'}
+            </button>
+            <button class="btn btn-outline-danger delete-btn" data-id="${driver.id}">
+              <i class="bi bi-trash me-1"></i>刪除
+            </button>
+          </div>
+        </td>
+      </tr>
+    `)
+    .join('');
+
+  attachRowHandlers();
+}
+
+function attachRowHandlers() {
+  tableBody.querySelectorAll('.edit-btn').forEach((btn) => {
+    btn.addEventListener('click', () => openEditModal(btn.dataset.id));
+  });
+
+  tableBody.querySelectorAll('.toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const driver = driversCache.find((d) => d.id === id);
+      if (!driver) return;
+
+      btn.disabled = true;
+      try {
+        await updateDriver(id, { isActive: !driver.isActive });
+        showAlert(`已${driver.isActive ? '停用' : '啟用'}司機`, 'success');
+        await refreshTable();
+      } catch (error) {
+        console.error('Toggle driver failed:', error);
+        showAlert('狀態切換失敗，請稍後再試');
+        btn.disabled = false;
+      }
+    });
+  });
+
+  tableBody.querySelectorAll('.delete-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const driver = driversCache.find((d) => d.id === id);
+      if (!driver) return;
+
+      const confirmDelete = window.confirm(`確定要刪除「${driver.displayName || '此司機'}」嗎？`);
+      if (!confirmDelete) return;
+
+      btn.disabled = true;
+      try {
+        await deleteDriver(id);
+        showAlert('刪除成功', 'success');
+        await refreshTable();
+      } catch (error) {
+        console.error('Delete driver failed:', error);
+        showAlert('刪除失敗，請稍後再試');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function openCreateModal() {
+  editingId = null;
+  modalTitle.textContent = '新增司機';
+  form.reset();
+  activeInput.checked = true;
+  hideAlert();
+  modal.show();
+}
+
+function openEditModal(id) {
+  const driver = driversCache.find((d) => d.id === id);
+  if (!driver) {
+    showAlert('找不到司機資料');
+    return;
+  }
+
+  editingId = id;
+  modalTitle.textContent = '編輯司機';
+  nameInput.value = driver.displayName ?? '';
+  emailInput.value = driver.email ?? '';
+  phoneInput.value = driver.phone ?? '';
+  licenseInput.value = driver.licenseNo ?? '';
+  activeInput.checked = driver.isActive ?? false;
+
+  hideAlert();
+  modal.show();
+}
+
+async function refreshTable() {
+  try {
+    driversCache = await listAllDrivers();
+    renderTable(driversCache);
+  } catch (error) {
+    console.error('Load drivers failed:', error);
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center text-danger py-4">
+          載入司機資料失敗，請重新整理頁面或稍後再試。
+        </td>
+      </tr>`;
+  }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const displayName = nameInput.value.trim();
+
+  if (!displayName) {
+    showAlert('姓名為必填欄位');
+    return;
+  }
+
+  const payload = {
+    displayName,
+    email: normalizeOptional(emailInput.value),
+    phone: normalizeOptional(phoneInput.value),
+    licenseNo: normalizeOptional(licenseInput.value),
+    isActive: activeInput.checked
+  };
+
+  saveBtn.disabled = true;
+  savingSpinner.classList.remove('d-none');
+
+  try {
+    if (editingId) {
+      await updateDriver(editingId, payload);
+      showAlert('更新成功', 'success');
+    } else {
+      await createDriver(payload);
+      showAlert('新增成功', 'success');
+    }
+    modal.hide();
+    await refreshTable();
+  } catch (error) {
+    console.error('Save driver failed:', error);
+    showAlert('儲存失敗，請稍後再試');
+  } finally {
+    saveBtn.disabled = false;
+    savingSpinner.classList.add('d-none');
+  }
+});
+
+addBtn.addEventListener('click', openCreateModal);
+modalEl.addEventListener('hidden.bs.modal', () => {
+  form.reset();
+  editingId = null;
+  hideAlert();
+});
+
+refreshTable();

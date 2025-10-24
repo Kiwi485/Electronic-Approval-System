@@ -31,6 +31,7 @@ export const listActiveDrivers = (...a) => d().listActiveDrivers(...a);
 export const listAllDrivers    = (...a) => d().listAllDrivers(...a);
 export const createDriver      = (...a) => d().createDriver(...a);
 export const updateDriver      = (...a) => d().updateDriver(...a);
+export const deleteDriver      = (...a) => d().deleteDriver(...a);
 
 // 暴露整體模組（提供測試 / mock 重置等工具）；使用 getter 取得來源資訊
 export const machines = { get __source() { return getApiSource(); }, ...machinesMock, ...machinesFirestore };

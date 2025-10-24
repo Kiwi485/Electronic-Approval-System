@@ -49,6 +49,7 @@ export const listActiveDrivers = (...a) => d().listActiveDrivers(...a);
 export const listAllDrivers    = (...a) => d().listAllDrivers(...a);
 export const createDriver      = (...a) => d().createDriver(...a);
 export const updateDriver      = (...a) => d().updateDriver(...a);
+export const deleteDriver      = (...a) => d().deleteDriver(...a);
 
 // 簽單（deliveryNotes）API ------------------------------------------------------
 export const createDelivery            = (...a) => dn().createDelivery(...a);
