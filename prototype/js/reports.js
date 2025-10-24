@@ -13,6 +13,49 @@ const filterCustomer = document.getElementById('filterCustomer');
 const filterMachine = document.getElementById('filterMachine');
 const filterDriver = document.getElementById('filterDriver');
 const sortableHeaders = Array.from(document.querySelectorAll('th.sortable'));
+const machineCatalog = {
+  map: new Map(),        // exact id -> display name
+  alias: new Map(),      // normalized alias -> display name
+  aliasToId: new Map(),  // normalized alias -> canonical id
+  loaded: false,
+  lastError: null
+};
+
+function normalizeId(value) {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  return str ? str : null;
+}
+
+function normalizeAlias(value) {
+  const str = normalizeId(value);
+  return str ? str.toLowerCase() : null;
+}
+
+function equalsIgnoreCase(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  return String(a).toLowerCase() === String(b).toLowerCase();
+}
+
+function lookupMachineName(key) {
+  if (!key) return '';
+  const exact = normalizeId(key);
+  if (exact && machineCatalog.map.has(exact)) {
+    return machineCatalog.map.get(exact) || '';
+  }
+  const aliasKey = normalizeAlias(key);
+  if (aliasKey && machineCatalog.alias.has(aliasKey)) {
+    return machineCatalog.alias.get(aliasKey) || '';
+  }
+  return '';
+}
+
+function findCatalogIdByAlias(value) {
+  const aliasKey = normalizeAlias(value);
+  if (!aliasKey) return null;
+  return machineCatalog.aliasToId.get(aliasKey) || null;
+}
 
 const state = {
   allRows: [],
@@ -49,6 +92,7 @@ async function init() {
   bindEvents();
 
   try {
+    await ensureMachineCatalog();
     const rows = shouldUseMock() ? await fetchMockRows() : await fetchFirestoreRows();
     state.allRows = rows;
     await prepareFilterOptions(rows);
@@ -130,12 +174,14 @@ window.addEventListener('mock-report-updated', async (e) => {
 });
 
 async function fetchMockRows() {
+  await ensureMachineCatalog();
   const rows = loadMockReportRows().map(row => adaptDeliveryNoteToReportRow(row));
   return rows;
 }
 
 async function fetchFirestoreRows() {
   try {
+    await ensureMachineCatalog();
     const { db } = await import('../firebase-init.js');
     const { collection, getDocs } = await import('https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js');
     const snap = await getDocs(collection(db, 'deliveryNotes'));
@@ -167,10 +213,10 @@ function populateCustomerOptions(rows) {
 
 async function loadMachineOptions(rows) {
   try {
-    const machines = await listAllMachines();
-    if (!Array.isArray(machines)) return [];
-    const names = machines.map(m => m.name || '').filter(Boolean);
-    return names.length ? names : rows.map(r => r.modelName).filter(Boolean);
+    await ensureMachineCatalog();
+    const names = Array.from(machineCatalog.map.values()).filter(Boolean);
+    if (names.length) return names;
+    return rows.map(r => r.modelName).filter(Boolean);
   } catch (error) {
     console.warn('載入機具選項失敗', error);
     return rows.map(r => r.modelName).filter(Boolean);
@@ -344,6 +390,32 @@ function adaptDeliveryNoteToReportRow(note = {}) {
   const quantity = toNumberOrNull(note.quantity ?? note.amountQuantity ?? null);
   const amount = toNumberOrNull(note.amount ?? note.totalAmount ?? null);
   const received = normalizeReceivedCash(note);
+  const machineIdRaw = note.machineId ?? note.machine?.id ?? null;
+  let machineId = machineIdRaw != null ? normalizeId(machineIdRaw) : null;
+  const modelSource = note.modelName
+    ?? note.machineName
+    ?? note.machine?.name
+    ?? note.machineModel
+    ?? (typeof note.machine === 'string' ? note.machine : '')
+    ?? '';
+  let modelName = typeof modelSource === 'string' ? modelSource.trim() : (modelSource ? String(modelSource).trim() : '');
+  const modelAlias = normalizeId(modelName);
+
+  if (!machineId && modelAlias) {
+    const guessedId = findCatalogIdByAlias(modelAlias) || findCatalogIdByAlias(modelName);
+    if (guessedId) machineId = guessedId;
+  }
+
+  const nameFromCatalogById = lookupMachineName(machineId);
+  const nameFromCatalogByModel = lookupMachineName(modelAlias || modelName);
+
+  if (!modelName && nameFromCatalogById) {
+    modelName = nameFromCatalogById;
+  } else if (nameFromCatalogById && equalsIgnoreCase(modelName, machineId)) {
+    modelName = nameFromCatalogById;
+  } else if (nameFromCatalogByModel) {
+    modelName = nameFromCatalogByModel;
+  }
 
   return {
     id: note.id || note.localId || null,
@@ -357,11 +429,68 @@ function adaptDeliveryNoteToReportRow(note = {}) {
     unit: note.unit ?? note.quantityUnit ?? '',
     amount: amount ?? 0,
     receivedCash: received,
-    modelName: note.modelName ?? note.machineName ?? note.machineModel ?? '',
+    modelName,
+    machineId,
     driverName: note.driverName ?? note.driver?.name ?? note.driver ?? '',
     vehicleNumber: note.vehicleNumber ?? note.vehicle?.number ?? note.vehiclePlate ?? '',
     paidAt: note.paidAt ?? null
   };
+}
+
+async function ensureMachineCatalog(force = false) {
+  if (machineCatalog.loaded && !force) return machineCatalog.map;
+  try {
+    const machines = await listAllMachines();
+    machineCatalog.map.clear();
+    machineCatalog.alias.clear();
+    machineCatalog.aliasToId.clear();
+    if (Array.isArray(machines)) {
+      machines.forEach(machine => {
+        if (!machine) return;
+        const idRaw = machine.id ?? machine.machineId ?? machine.uid ?? machine.code ?? null;
+        const idKey = normalizeId(idRaw);
+        if (!idKey) return;
+        const displayName = [machine.displayName, machine.modelName, machine.name, machine.label, machine.title, machine.alias]
+          .map(v => (typeof v === 'string') ? v.trim() : '')
+          .find(text => text && text.length > 0) || idKey;
+
+        machineCatalog.map.set(idKey, displayName);
+
+        const canonicalAlias = normalizeAlias(idKey);
+        if (canonicalAlias) {
+          machineCatalog.alias.set(canonicalAlias, displayName);
+          machineCatalog.aliasToId.set(canonicalAlias, idKey);
+        }
+
+        const aliasCandidates = [
+          machine.name,
+          machine.displayName,
+          machine.modelName,
+          machine.code,
+          machine.alias,
+          machine.label,
+          machine.title
+        ];
+
+        aliasCandidates.forEach(candidate => {
+          const aliasKey = normalizeAlias(candidate);
+          if (!aliasKey) return;
+          if (!machineCatalog.alias.has(aliasKey)) {
+            machineCatalog.alias.set(aliasKey, displayName);
+          }
+          if (!machineCatalog.aliasToId.has(aliasKey)) {
+            machineCatalog.aliasToId.set(aliasKey, idKey);
+          }
+        });
+      });
+    }
+    machineCatalog.loaded = true;
+    machineCatalog.lastError = null;
+  } catch (err) {
+    machineCatalog.lastError = err;
+    console.warn('[Reports] 載入機具清單失敗（catalog）', err);
+  }
+  return machineCatalog.map;
 }
 
 function normalizeDateValue(value) {
