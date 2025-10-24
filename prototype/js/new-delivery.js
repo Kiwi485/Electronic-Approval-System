@@ -10,6 +10,14 @@ console.log('🚀 new-delivery.js 已載入');
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
 
+// 預設表單日期為『今天』（本地時區），避免新增後『今日簽單』不計入
+function pad(n){ return String(n).padStart(2,'0'); }
+function localDateStr(d = new Date()) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+document.addEventListener('DOMContentLoaded', () => {
+  const dateEl = document.getElementById('date');
+  if (dateEl && !dateEl.value) dateEl.value = localDateStr();
+});
+
 async function waitForFlags(timeout = 1000) {
   const start = Date.now();
   while (typeof window.APP_FLAGS === 'undefined' && (Date.now() - start) < timeout) {
@@ -43,6 +51,8 @@ form?.addEventListener('submit', async (e) => {
     localId: crypto.randomUUID(),
     ...baseData,
     signatureStatus: baseData.signatureStatus || 'pending',
+    // 預設為未收款（供首頁「未收款」統計使用）
+    paidAt: null,
     createdAt: new Date().toISOString()
   };
   submitBtn.disabled = true;
