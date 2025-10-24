@@ -67,7 +67,7 @@
                         <div class="card card-dashboard h-100 bg-info text-white">
                             <div class="card-body">
                                 <h5 class="card-title d-flex justify-content-between">
-                                    <span>今日工作</span>
+                                    <span>今日簽單</span>
                                     <i class="bi bi-calendar-check"></i>
                                 </h5>
                                 <p class="display-4 mb-0">5</p>
@@ -116,7 +116,7 @@
                 <!-- 今日工作列表 -->
                 <div class="card mb-4">
                     <div class="card-header bg-white">
-                        <h5 class="card-title mb-0">今日工作</h5>
+                        <h5 class="card-title mb-0">今日簽單</h5>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -238,6 +238,8 @@
     <!-- 旗標需最先載入（此頁只有一個 module, 放在 auth-guard 前） -->
     <script type="module" src="./js/config-flags.js"></script>
     <script type="module" src="./js/auth-guard.js"></script>
+    <!-- 首頁儀表：直接接 Firestore（不受 Mock 影響） -->
+    <script type="module" src="./js/index-dashboard.js"></script>
     
 </body>
 </html>
