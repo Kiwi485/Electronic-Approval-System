@@ -1242,7 +1242,7 @@ firebase emulators:start
 $env:FIRESTORE_EMULATOR_HOST="localhost:8080"
 $env:FIREBASE_AUTH_EMULATOR_HOST="localhost:9099"
 $env:GCLOUD_PROJECT="electronic-approval-dev"
-
+npm install firebase-admin
 node .\prototype\js\tools\dev-seed-users.js --force
 ```
 檢查 seeder 輸出，確認有列出 `[Env] GCLOUD_PROJECT: electronic-approval-dev` 與每位使用者的建立/略過訊息。
