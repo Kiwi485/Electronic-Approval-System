@@ -108,6 +108,8 @@ function attachTableEvents() {
         await updateMachine(id, { isActive: !machine.isActive, updatedAt: Date.now() });
         showAlert(`已${machine.isActive ? '停用' : '啟用'}機具`, 'success');
         await refreshTable();
+        // notify other tabs/pages that machines changed
+        try { localStorage.setItem('machines_updated_at', Date.now().toString()); window.dispatchEvent(new CustomEvent('machines-updated')); } catch(e){}
       } catch (err) {
         console.error('Toggle error:', err);
         showAlert('狀態切換失敗');
@@ -128,6 +130,7 @@ function attachTableEvents() {
         await deleteMachine(id);
         showAlert('刪除成功', 'success');
         await refreshTable();
+        try { localStorage.setItem('machines_updated_at', Date.now().toString()); window.dispatchEvent(new CustomEvent('machines-updated')); } catch(e){}
       } catch (err) {
         console.error('Delete error:', err);
         showAlert('刪除失敗');
@@ -220,6 +223,7 @@ form.addEventListener('submit', async e => {
     }
     modal.hide();
     await refreshTable();
+    try { localStorage.setItem('machines_updated_at', Date.now().toString()); window.dispatchEvent(new CustomEvent('machines-updated')); } catch(e){}
   } catch (err) {
     console.error('Save error:', err);
     showAlert('儲存失敗');

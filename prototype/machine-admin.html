@@ -1,162 +1,155 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>機具管理</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<!-- 補上圖示套件，讓 <i class="bi ..."> 正常顯示 -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
-<style>
-  .usage-input {
-    width: 80px;
-    display: inline-block;
-  }
-  .usage-input:focus {
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-  }
-  .btn-sm {
-    margin: 0 2px;
-  }
-  .table td {
-    vertical-align: middle;
-  }
-  .alert {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 9999;
-    min-width: 300px;
-    animation: slideIn 0.3s ease-out;
-  }
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>機具管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    .usage-input {
+      width: 80px;
+      display: inline-block;
     }
-    to {
-      transform: translateX(0);
-      opacity: 1;
+    .usage-input:focus {
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
     }
-  }
-</style>
+    .btn-sm {
+      margin: 0 2px;
+    }
+    .table td {
+      vertical-align: middle;
+    }
+    .alert-floating {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1055;
+      min-width: 300px;
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
 </head>
-<body class="px-4 pb-4"></body>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="index.html">
+        <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
+      </a>
+    </div>
+  </nav>
 
-<!-- 新增：頂部導覽列，點擊品牌可回首頁 -->
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top mb-3">
   <div class="container-fluid">
-    <a class="navbar-brand" href="index.html">
-      <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
-    </a>
-  </div>
-</nav>
-
-<div class="container">
-<h1 class="mb-4">
-  <i class="bi bi-tools"></i> 機具管理
-</h1>
-
-<!-- Alert -->
-<div id="alertBox" class="alert d-none" role="alert"></div>
-
-<!-- 新增機具按鈕 -->
-<button id="addMachineBtn" class="btn btn-primary mb-3">
-  ➕ 新增機具
-</button>
-
-<!-- 機具列表 -->
-<div class="table-responsive">
-<table class="table table-bordered table-striped table-hover" id="machineTable">
-<thead class="table-dark">
-<tr>
-  <th>名稱</th>
-  <th>類別名稱</th>
-  <th>狀態</th>
-  <th>使用次數</th>
-  <th>最後使用</th>
-  <th style="min-width: 200px;">操作</th>
-</tr>
-</thead>
-<tbody>
-<!-- JS 動態生成 -->
-<tr>
-  <td colspan="6" class="text-center text-muted">
-    <div class="spinner-border spinner-border-sm me-2" role="status">
-      <span class="visually-hidden">載入中...</span>
-    </div>
-    載入中...
-  </td>
-</tr>
-</tbody>
-</table>
-</div>
-
-<!-- 統計資訊 -->
-<div class="card mt-3">
-  <div class="card-body">
-    <h6 class="card-title">統計資訊</h6>
     <div class="row">
-      <div class="col-md-3">
-        <small class="text-muted">總機具數</small>
-        <div class="h4" id="totalCount">-</div>
-      </div>
-      <div class="col-md-3">
-        <small class="text-muted">啟用中</small>
-        <div class="h4 text-success" id="activeCount">-</div>
-      </div>
-      <div class="col-md-3">
-        <small class="text-muted">停用中</small>
-        <div class="h4 text-warning" id="inactiveCount">-</div>
-      </div>
-      <div class="col-md-3">
-        <small class="text-muted">總使用次數</small>
-        <div class="h4 text-primary" id="totalUsage">-</div>
-      </div>
-    </div>
-  </div>
-</div>
-</div>
+      <!-- 共用側欄：與首頁一致 -->
+      <script type="module" src="js/include-nav.js?v=20251024d"></script>
 
-<!-- Modal: 新增/編輯機具 -->
-<div class="modal fade" id="machineModal" tabindex="-1" aria-hidden="true">
-<div class="modal-dialog">
-<form class="modal-content" id="machineForm">
-  <div class="modal-header">
-    <h5 class="modal-title" id="modalTitle">新增機具</h5>
-    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-  </div>
-  <div class="modal-body">
-    <input type="hidden" id="machineId">
-    <div class="mb-3">
-      <label for="machineName" class="form-label">名稱 <span class="text-danger">*</span></label>
-      <input type="text" class="form-control" id="machineName" required placeholder="請輸入機具名稱">
-    </div>
-    <div class="mb-3">
-      <label for="machineCategory" class="form-label">類別 <span class="text-danger">*</span></label>
-      <select class="form-select" id="machineCategory" required>
-        <option value="" disabled selected>請選擇類別</option>
-      </select>
-    </div>
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" id="machineActive" checked>
-      <label class="form-check-label" for="machineActive">啟用</label>
-    </div>
-  </div>
-  <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-    <button type="submit" class="btn btn-primary" id="saveBtn">
-      <span class="spinner-border spinner-border-sm d-none me-1" id="savingSpinner"></span>
-      儲存
-    </button>
-  </div>
-</form>
-</div>
-</div>
+      <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h1 class="h3 mb-0"><i class="bi bi-tools me-2"></i>機具管理</h1>
+          <button id="addMachineBtn" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>新增機具
+          </button>
+        </div>
 
-<!-- 先載入 Bootstrap,再載入你的模組 -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module" src="js/machine-admin.js"></script>
-<script type="module" src="js/include-nav.js"></script>
+        <div id="alertBox" class="alert alert-floating d-none" role="alert"></div>
+
+        <div class="table-responsive mb-3">
+          <table class="table table-bordered table-striped table-hover" id="machineTable">
+            <thead class="table-dark">
+              <tr>
+                <th>名稱</th>
+                <th>類別名稱</th>
+                <th>狀態</th>
+                <th>使用次數</th>
+                <th>最後使用</th>
+                <th style="min-width: 200px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="6" class="text-center text-muted">
+                  <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                  載入中...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <h6 class="card-title">統計資訊</h6>
+            <div class="row g-3">
+              <div class="col-sm-6 col-xl-3">
+                <small class="text-muted">總機具數</small>
+                <div class="h4 mb-0" id="totalCount">-</div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <small class="text-muted">啟用中</small>
+                <div class="h4 text-success mb-0" id="activeCount">-</div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <small class="text-muted">停用中</small>
+                <div class="h4 text-warning mb-0" id="inactiveCount">-</div>
+              </div>
+              <div class="col-sm-6 col-xl-3">
+                <small class="text-muted">總使用次數</small>
+                <div class="h4 text-primary mb-0" id="totalUsage">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal fade" id="machineModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="machineForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">新增機具</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="machineId">
+          <div class="mb-3">
+            <label for="machineName" class="form-label">名稱 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="machineName" required placeholder="請輸入機具名稱">
+          </div>
+          <div class="mb-3">
+            <label for="machineCategory" class="form-label">類別 <span class="text-danger">*</span></label>
+            <select class="form-select" id="machineCategory" required>
+              <option value="" disabled selected>請選擇類別</option>
+            </select>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="machineActive" checked>
+            <label class="form-check-label" for="machineActive">啟用</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="savingSpinner"></span>
+            儲存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="js/machine-admin.js"></script>
 </body>
 </html>

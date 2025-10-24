@@ -23,8 +23,8 @@
     }
   </style>
 </head>
-<body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top mb-4">
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
     <div class="container-fluid">
       <a class="navbar-brand" href="index.html">
         <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
@@ -32,39 +32,46 @@
     </div>
   </nav>
 
-  <main class="container pb-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h1 class="h3 mb-0"><i class="bi bi-people-fill me-2"></i>司機管理</h1>
-      <button id="addDriverBtn" class="btn btn-primary">
-        <i class="bi bi-plus-lg me-1"></i>新增司機
-      </button>
-    </div>
+  <div class="container-fluid">
+    <div class="row">
+      <!-- 共用側欄：與首頁一致 -->
+      <script type="module" src="js/include-nav.js?v=20251024d"></script>
 
-    <div id="alertBox" class="alert alert-floating d-none" role="alert"></div>
+      <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 py-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h1 class="h3 mb-0"><i class="bi bi-people-fill me-2"></i>司機管理</h1>
+          <button id="addDriverBtn" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>新增司機
+          </button>
+        </div>
 
-    <div class="table-responsive bg-white rounded shadow-sm">
-      <table class="table table-hover align-middle mb-0" id="driverTable">
-        <thead class="table-light">
-          <tr>
-            <th scope="col">姓名</th>
-            <th scope="col">角色</th>
-            <th scope="col">狀態</th>
-            <th scope="col">Email</th>
-            <th scope="col">電話</th>
-            <th scope="col" style="min-width: 220px;">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td colspan="6" class="text-center text-muted py-4">
-              <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-              載入資料中...
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        <div id="alertBox" class="alert alert-floating d-none" role="alert"></div>
+
+        <div class="table-responsive bg-white rounded shadow-sm">
+          <table class="table table-hover align-middle mb-0" id="driverTable">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">姓名</th>
+                <th scope="col">角色</th>
+                <th scope="col">狀態</th>
+                <th scope="col">Email</th>
+                <th scope="col">電話</th>
+                <th scope="col" style="min-width: 220px;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                  <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                  載入資料中...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
     </div>
-  </main>
+  </div>
 
   <!-- Modal -->
   <div class="modal fade" id="driverModal" tabindex="-1" aria-hidden="true">
