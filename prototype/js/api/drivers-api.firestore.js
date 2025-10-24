@@ -38,6 +38,20 @@ const toDriverModel = (snapshot) => {
   };
 };
 
+const toManagerModel = (snapshot) => {
+  const data = snapshot.data() || {};
+  return {
+    id: snapshot.id,
+    displayName: data.displayName || data.name || '',
+    role: data.role || 'manager',
+    isActive: data.isActive !== false,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    createdAt: timestampToIso(data.createdAt),
+    updatedAt: timestampToIso(data.updatedAt)
+  };
+};
+
 export async function listActiveDrivers() {
   // 以 role=driver 且 isActive=true 查詢
   const q = query(usersCol, where('role', '==', 'driver'), where('isActive', '==', true));
@@ -49,6 +63,19 @@ export async function listAllDrivers() {
   const q = query(usersCol, where('role', '==', 'driver'));
   const snap = await getDocs(q);
   return snap.docs.map(toDriverModel);
+}
+
+// Managers listing (users with role === 'manager')
+export async function listActiveManagers() {
+  const q = query(usersCol, where('role', '==', 'manager'), where('isActive', '==', true));
+  const snap = await getDocs(q);
+  return snap.docs.map(toManagerModel);
+}
+
+export async function listAllManagers() {
+  const q = query(usersCol, where('role', '==', 'manager'));
+  const snap = await getDocs(q);
+  return snap.docs.map(toManagerModel);
 }
 
 /**
