@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>司機管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background-color: #f5f6f8; }
+    .table td { vertical-align: middle; }
+    .alert-floating {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1055;
+      min-width: 260px;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="index.html">
+        <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
+      </a>
+    </div>
+  </nav>
+
+  <main class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h3 mb-0"><i class="bi bi-people-fill me-2"></i>司機管理</h1>
+      <button id="addDriverBtn" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>新增司機
+      </button>
+    </div>
+
+    <div id="alertBox" class="alert alert-floating d-none" role="alert"></div>
+
+    <div class="table-responsive bg-white rounded shadow-sm">
+      <table class="table table-hover align-middle mb-0" id="driverTable">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">姓名</th>
+            <th scope="col">角色</th>
+            <th scope="col">狀態</th>
+            <th scope="col">Email</th>
+            <th scope="col">電話</th>
+            <th scope="col" style="min-width: 220px;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+              <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+              載入資料中...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal fade" id="driverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="driverForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">新增司機</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="driverId">
+          <div class="mb-3">
+            <label for="driverName" class="form-label">姓名 <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="driverName" required placeholder="請輸入司機姓名">
+          </div>
+          <div class="mb-3">
+            <label for="driverEmail" class="form-label">Email</label>
+            <input type="email" class="form-control" id="driverEmail" placeholder="driver@example.com">
+          </div>
+          <div class="mb-3">
+            <label for="driverPhone" class="form-label">電話</label>
+            <input type="text" class="form-control" id="driverPhone" placeholder="例如：0912-345-678">
+          </div>
+          <div class="mb-3">
+            <label for="driverLicense" class="form-label">駕照編號</label>
+            <input type="text" class="form-control" id="driverLicense" placeholder="例如：A123456789">
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="driverActive" checked>
+            <label class="form-check-label" for="driverActive">啟用</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="savingSpinner"></span>
+            儲存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import('./js/config-flags.js').catch(() => {});
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script type="module" src="js/driver-admin.js"></script>
+</body>
+</html>
