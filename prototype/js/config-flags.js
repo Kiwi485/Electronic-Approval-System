@@ -1,118 +1,54 @@
 // 全域功能旗標 (Feature Flags)
 // 可依開發 / 測試 / 上線調整。後續若導入更正式的設定，可改由 Firestore Remote Config 或環境檔。
-window.APP_FLAGS = {
-  // 使用 mock 資料 (true) 或真實 Firestore (false)
-  USE_MOCK_DATA: true,
-  // 是否啟用多機具 UI 與 payload 寫入 machines[]
+// 初始旗標（預設以 Firestore 為使用情境）
+const DEFAULT_FLAGS = {
+  USE_MOCK_DATA: false,
   ENABLE_MULTI_MACHINE: true,
-  // 是否啟用多司機 UI 與 payload 寫入 drivers[]
   ENABLE_MULTI_DRIVER: true,
-  // 是否在簽單建立頁面過濾掉停用 (isActive=false) 的機具
   ENABLE_MACHINE_DEACTIVATE_FILTER: false,
-  // 是否在簽單建立頁面過濾掉停用 (isActive=false) 的司機
-  // 若未設定，drivers-ui 會預設為 true（僅啟用）；現在明確寫入以避免混淆
-  ENABLE_DRIVER_DEACTIVATE_FILTER: true,
-  // （預留）是否顯示資料遷移工具按鈕
   ENABLE_MIGRATION_TOOL: true
 };
 
-console.info('[Flags] Loaded APP_FLAGS =', window.APP_FLAGS);
+// 支援可選的 localStorage persistence（鍵名）
+const PERSIST_KEY = 'APP_FLAGS_USE_MOCK_DATA_PERSIST';
 
-// ---- Runtime override：Console 可獨立於 APP_FLAGS 控制來源（支援跨刷新持久化） ----
-const __LS_KEY = 'app.runtime.forceApiSource';
-let __persisted = null;
-// 首次開啟以 config 為準：覆寫僅在「本瀏覽器分頁工作階段」內有效
-try { __persisted = sessionStorage.getItem(__LS_KEY); } catch {}
-if (__persisted !== 'mock' && __persisted !== 'firestore') __persisted = null;
-window.APP_RUNTIME = window.APP_RUNTIME || { FORCE_API_SOURCE: __persisted }; // 'mock' | 'firestore' | null
+// 先讀取任何持久化設定（若使用者先前選擇 persist）
+let persisted = null;
+try { persisted = localStorage.getItem(PERSIST_KEY); } catch (e) { persisted = null; }
+const initialFlags = { ...DEFAULT_FLAGS };
+if (persisted === 'true') initialFlags.USE_MOCK_DATA = true;
+if (persisted === 'false') initialFlags.USE_MOCK_DATA = false;
 
-function emit(type, detail) {
-  try { window.dispatchEvent(new CustomEvent(type, { detail })); } catch {}
-}
-
-// Console helpers
-window.setApiSource = function setApiSource(src /* 'mock' | 'firestore' | null */) {
-  if (src !== 'mock' && src !== 'firestore' && src !== null) {
-    console.warn('[Flags] setApiSource: 無效值，使用 null 取消覆寫');
-    src = null;
-  }
-  window.APP_RUNTIME.FORCE_API_SOURCE = src;
-  try {
-    if (src === null) {
-      sessionStorage.removeItem(__LS_KEY);
-    } else {
-      sessionStorage.setItem(__LS_KEY, src);
-    }
-  } catch {}
-  console.info('[Flags] RUNTIME API SOURCE =>', src ?? '(follow config)');
-  emit('apisourcechange', { source: src });
-};
-
-window.useMock = () => window.setApiSource('mock');
-window.useFirestore = () => window.setApiSource('firestore');
-window.useConfigSource = () => window.setApiSource(null);
-
-// ---- Dev helpers：允許在 Console 即時切換並同步 UI ----
-function dispatchFlagsChange(key) {
-  try {
-    window.dispatchEvent(new CustomEvent('appflagschange', {
-      detail: { key, value: window.APP_FLAGS?.[key] }
-    }));
-  } catch {}
-}
-
-window.setUseMockData = function setUseMockData(v) {
-  window.APP_FLAGS.USE_MOCK_DATA = v === true;
-  console.info('[Flags] USE_MOCK_DATA =>', window.APP_FLAGS.USE_MOCK_DATA);
-  dispatchFlagsChange('USE_MOCK_DATA');
-  // 讓以 APP_FLAGS 設值也能直接影響實際來源（同你在 Console 的預期用法）
-  if (window.setApiSource) {
-    window.setApiSource(window.APP_FLAGS.USE_MOCK_DATA ? 'mock' : 'firestore');
+// 建立 proxy，監聽變更並廣播事件
+const handler = {
+  set(target, prop, value) {
+    const old = target[prop];
+    target[prop] = value;
+    try {
+      // 當 USE_MOCK_DATA 變更時，發出 appflagschange 事件
+      if (prop === 'USE_MOCK_DATA' && old !== value) {
+        console.info('[Flags] USE_MOCK_DATA changed =>', value);
+        window.dispatchEvent(new CustomEvent('appflagschange', { detail: { key: 'USE_MOCK_DATA', value } }));
+        // 自動持久化變更，讓 Console 切換在重新整理後維持
+        try { localStorage.setItem(PERSIST_KEY, value ? 'true' : 'false'); console.info('[Flags] auto-persisted USE_MOCK_DATA =', value); } catch (e) { console.warn('[Flags] auto-persist failed', e); }
+      }
+    } catch (e) { /* ignore */ }
+    return true;
   }
 };
 
-window.toggleMock = function toggleMock() {
-  window.setUseMockData(!window.APP_FLAGS?.USE_MOCK_DATA);
+window.APP_FLAGS = new Proxy(initialFlags, handler);
+
+// Helper: persist current USE_MOCK_DATA to localStorage
+window.setUseMockPersist = function(v = true) {
+  try {
+    localStorage.setItem(PERSIST_KEY, v ? 'true' : 'false');
+    console.info('[Flags] Persisted USE_MOCK_DATA =', v);
+  } catch (e) { console.warn('[Flags] persist failed', e); }
 };
 
-window.setDriverFilterEnabled = function setDriverFilterEnabled(v) {
-  window.APP_FLAGS.ENABLE_DRIVER_DEACTIVATE_FILTER = v === true;
-  console.info('[Flags] ENABLE_DRIVER_DEACTIVATE_FILTER =>', window.APP_FLAGS.ENABLE_DRIVER_DEACTIVATE_FILTER);
-  dispatchFlagsChange('ENABLE_DRIVER_DEACTIVATE_FILTER');
+window.clearUseMockPersist = function() {
+  try { localStorage.removeItem(PERSIST_KEY); console.info('[Flags] Cleared persisted USE_MOCK_DATA'); } catch (e) { console.warn('[Flags] clear persist failed', e); }
 };
 
-window.setMachineFilterEnabled = function setMachineFilterEnabled(v) {
-  window.APP_FLAGS.ENABLE_MACHINE_DEACTIVATE_FILTER = v === true;
-  console.info('[Flags] ENABLE_MACHINE_DEACTIVATE_FILTER =>', window.APP_FLAGS.ENABLE_MACHINE_DEACTIVATE_FILTER);
-  dispatchFlagsChange('ENABLE_MACHINE_DEACTIVATE_FILTER');
-};
-
-// ---- 讓直接指定 window.APP_FLAGS.<key> = value 也會觸發事件 ----
-(() => {
-  const flags = window.APP_FLAGS;
-  const notify = (key, val) => {
-    try {
-      window.dispatchEvent(new CustomEvent('appflagschange', { detail: { key, value: val } }));
-    } catch {}
-  };
-  ['USE_MOCK_DATA', 'ENABLE_DRIVER_DEACTIVATE_FILTER', 'ENABLE_MACHINE_DEACTIVATE_FILTER'].forEach((key) => {
-    let _val = flags[key];
-    try {
-      Object.defineProperty(flags, key, {
-        get() { return _val; },
-        set(v) {
-          _val = v;
-          notify(key, _val);
-          if (key === 'USE_MOCK_DATA' && window.setApiSource) {
-            // 讓直接寫 APP_FLAGS.USE_MOCK_DATA 也能切換來源
-            window.setApiSource(_val ? 'mock' : 'firestore');
-          }
-        },
-        configurable: true,
-        enumerable: true
-      });
-    } catch {
-      // 某些環境若 defineProperty 失敗則略過，仍可使用 setUseMockData 等 helper
-    }
-  });
-})();
+console.info('[Flags] Loaded APP_FLAGS =', window.APP_FLAGS, ' (persistedOverride=', persisted, ')');

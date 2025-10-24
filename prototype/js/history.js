@@ -1,9 +1,8 @@
 // history.js - 讀取簽單歷史 + 搜尋 + 分頁 + 詳情 (含離線未同步資料顯示)
-import { db } from '../firebase-init.js';
-import { collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { listHistoryDeliveries, getApiSource } from './api/index.js';
 import { offlineManager } from './offline.js';
 
-console.log('📜 history.js 已載入');
+console.log('📜 history.js 已載入，來源=', getApiSource());
 
 const tbody = document.getElementById('historyTable');
 const searchCustomer = document.getElementById('searchCustomer');
@@ -16,14 +15,7 @@ let allData = []; // 原始 (含線上 + 離線)
 let filtered = []; // 搜尋結果
 let currentPage = 1;
 
-function normalizeDoc(doc) {
-  const d = doc.data();
-  // Firestore Timestamp 處理 (serverCreatedAt 或 createdAt 任一)
-  let createdAt = d.createdAt;
-  if (d.serverCreatedAt?.toDate) createdAt = d.serverCreatedAt.toDate().toISOString();
-  else if (d.createdAt?.toDate) createdAt = d.createdAt.toDate().toISOString();
-  return { id: doc.id, ...d, createdAt };
-}
+// API 已回傳可直接使用的物件（mock/Firestore 已各自處理時間欄位）
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -149,11 +141,10 @@ searchDate?.addEventListener('change', () => applyFilter());
 async function loadData() {
   const data = [];
   try {
-    const q = query(collection(db, 'deliveryNotes'), orderBy('serverCreatedAt', 'desc'));
-    const snap = await getDocs(q);
-    snap.forEach(doc => data.push(normalizeDoc(doc)));
+    const rows = await listHistoryDeliveries(200);
+    rows.forEach(item => data.push(item));
   } catch (e) {
-    console.warn('讀取線上資料失敗，僅顯示離線暫存', e);
+    console.warn('讀取線上/Mock 資料失敗，僅顯示離線暫存', e);
   }
   // 加入尚未同步的離線資料 (localStorage)
   const offline = offlineManager.getOfflineData();

@@ -30,7 +30,7 @@
             </div>
         </nav>
         <div class="row">
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <main class="col-12 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">新增簽單</h1>
                 </div>
@@ -172,13 +172,14 @@
         <script type="module">
             import(`./js/config-flags.js?v=${Date.now()}`);
         </script>
+        
     <!-- 新增：機具選單 UI（依旗標自動隱藏停用或顯示全部） -->
-    <script type="module" src="js/machines-ui.js?v=20251022"></script>
+    <script type="module" src="js/machines-ui.js?v=20251023"></script>
     <!-- 新增：司機選單 UI（支援 mock/Firestore 與閃斷線 fallback） -->
-    <script type="module" src="js/drivers-ui.js?v=20251022"></script>
-    <!-- 離線管理與新增簽單腳本 -->
-    <script type="module" src="js/offline.js"></script>
-    <script type="module" src="js/new-delivery.js"></script>
+    <script type="module" src="js/drivers-ui.js?v=20251023"></script>
+    <!-- 離線管理與新增簽單腳本（加版本避免快取舊 JS） -->
+    <script type="module" src="js/offline.js?v=20251023"></script>
+    <script type="module" src="js/new-delivery.js?v=20251023"></script>
     <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
     <script type="module" src="js/auth-guard.js"></script>
     <script type="module" src="js/tools/seed-drivers.js"></script>

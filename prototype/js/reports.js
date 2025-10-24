@@ -67,6 +67,13 @@ function updateDataSourceBadge() {
   dataSourceBadge.textContent = `來源：${modeLabel}`;
 }
 
+// 若透過 console 動態改變 window.APP_FLAGS，會建議在 console 觸發一個事件
+// 例如： window.APP_FLAGS.USE_MOCK_DATA = true; window.dispatchEvent(new CustomEvent('appflagschange'));
+// 下面的 listener 會在同 tab 中回應這個事件並更新 badge
+window.addEventListener('appflagschange', () => {
+  try { updateDataSourceBadge(); } catch (e) { /* ignore */ }
+});
+
 function bindEvents() {
   exportButton?.addEventListener('click', async (e) => {
     // 優先使用 xlsx 匯出（更穩定），若失敗再回退到 TSV

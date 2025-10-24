@@ -1,4 +1,4 @@
-import * as api from './api/index.js?v=20251022';
+// We'll dynamically import the appropriate implementation (mock vs firestore)
 
 async function waitForFlags(timeout = 500) {
   const start = Date.now();
@@ -10,8 +10,10 @@ async function waitForFlags(timeout = 500) {
 
 async function initDriversUi() {
   try {
-    const selectEl = document.getElementById('driverName');
-    if (!selectEl) return;
+    const elem = document.getElementById('driverName');
+    const datalistEl = document.getElementById('driverOptions');
+    const isSelect = elem && elem.tagName && elem.tagName.toLowerCase() === 'select';
+    if (!elem || (!datalistEl && !isSelect)) return;
 
     const flags = await waitForFlags(600);
     if (!flags) console.warn('[UI] config flags 未及時載入，將以預設值處理 (mock=true)');
@@ -20,8 +22,13 @@ async function initDriversUi() {
     const flag = window.APP_FLAGS?.ENABLE_DRIVER_DEACTIVATE_FILTER;
     const useFilter = (typeof flag === 'boolean') ? !!flag : true;
 
-    // 使用統一 API，來源由 api/index.js 依 flags/override 動態決定
-    const fetcher = useFilter ? api.listActiveDrivers : api.listAllDrivers;
+    // 動態 import：根據 flags 決定要載入 mock 或 firestore 實作
+    // 注意：只有當 flags 明確為 true 時才使用 mock，避免 flags 未載入時誤判
+    const wantMock = (window.APP_FLAGS?.USE_MOCK_DATA === true);
+    const implModule = wantMock
+      ? await import('./api/drivers-api.mock.js?v=2025-10-22a')
+      : await import('./api/drivers-api.firestore.js?v=2025-10-22a');
+    const fetcher = useFilter ? implModule.listActiveDrivers : implModule.listAllDrivers;
 
     let drivers = [];
     try {
@@ -36,18 +43,16 @@ async function initDriversUi() {
     }
 
     const toName = (d) => d?.displayName || d?.name || '';
-    const options = [
-      '<option value="">— 選擇司機 —</option>',
-      ...drivers
-        .map(d => toName(d))
-        .filter(Boolean)
-        .map(n => `<option value="${n}">${n}</option>`)
-    ].join('');
-    selectEl.innerHTML = options;
+    const names = drivers.map(toName).filter(Boolean);
 
-    const src = api.getApiSource();
-    const msg = `[UI] 司機下拉載入完成 (${useFilter ? 'active only' : 'all'})，共 ${drivers.length} 筆，來源=${src} | flags.mock=${window.APP_FLAGS?.USE_MOCK_DATA} | from=${import.meta.url}`;
-    console.info(msg);
+    if (isSelect) {
+      const select = elem;
+      select.innerHTML = `<option value="">— 選擇司機 —</option>` + names.map(n => `<option value="${n}">${n}</option>`).join('');
+      console.info(`[UI] 司機 select 載入完成 (${useFilter ? 'active only' : 'all'})，共 ${names.length} 筆，來源=${wantMock? 'mock':'firestore'}`);
+    } else {
+      datalistEl.innerHTML = names.map(n => `<option value="${n}"></option>`).join('');
+      console.info(`[UI] 司機 datalist 載入完成 (${useFilter ? 'active only' : 'all'})，共 ${names.length} 筆，來源=${wantMock? 'mock':'firestore'}`);
+    }
 
     // 如果 URL 帶 ?debug=1，顯示到頁面上方便使用者在沒有開發者工具時確認
     try {
@@ -68,7 +73,7 @@ async function initDriversUi() {
           dbg.style.zIndex = 99999;
           document.body.appendChild(dbg);
         }
-        dbg.textContent = msg;
+        dbg.textContent = `[UI] 司機 loaded ${names.length} (${isSelect ? 'select' : 'datalist'})`;
       }
     } catch (e) {
       // ignore URL parsing errors
@@ -83,12 +88,3 @@ if (document.readyState === 'loading') {
 } else {
   initDriversUi();
 }
-
-// 支援 Console/Override 變更時自動刷新
-window.addEventListener('appflagschange', (e) => {
-  const k = e?.detail?.key;
-  if (k === 'ENABLE_DRIVER_DEACTIVATE_FILTER') {
-    initDriversUi();
-  }
-});
-// 不在 apisourcechange 即時刷新，改由重整或手動呼叫 refreshDriversUI()
