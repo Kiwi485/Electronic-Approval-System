@@ -1,8 +1,17 @@
 // auth-guard.js - 共用頁面保護 + 登出 + 使用者 Email 顯示
 import { requireAuth, logout, waitAuthReady } from './auth.js';
+import { waitForProfile } from './session-context.js';
 
-// 先要求驗證（會自動隱藏整體再顯示）
-requireAuth();
+// 先要求驗證（會自動隱藏整體再顯示），並等待角色/個資載入避免閃爍
+requireAuth('login.html', {
+  afterAuth: async () => {
+    try {
+      await waitForProfile();
+    } catch (err) {
+      console.warn('[auth-guard] waitForProfile failed', err);
+    }
+  }
+});
 
 // 顯示使用者 Email
 waitAuthReady().then(u => {

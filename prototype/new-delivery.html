@@ -21,8 +21,8 @@
                         <span class="d-none d-md-inline" id="currentUserEmail">—</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
-                        <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
                     </ul>
@@ -30,7 +30,7 @@
             </div>
         </nav>
         <div class="row">
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <main class="col-12 px-md-4">
                 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
                     <h1 class="h2">新增簽單</h1>
                 </div>
@@ -60,6 +60,20 @@
                                 <label for="location" class="form-label">施工地點 <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" name="location" id="location" placeholder="輸入地址" data-required>
                                 <div class="invalid-feedback">請輸入施工地點</div>
+                            </div>
+
+                            <!-- 新增：目的、起點、終點（預設非必填） -->
+                            <div class="col-md-12">
+                                <label for="purpose" class="form-label">物品</label>
+                                <input type="text" class="form-control" name="purpose" id="purpose" placeholder="例如：樹木🪵、建材">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="origin" class="form-label">起點</label>
+                                <input type="text" class="form-control" name="origin" id="origin" placeholder="例如：台北市中山區民生東路 123 號">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="destination" class="form-label">終點</label>
+                                <input type="text" class="form-control" name="destination" id="destination" placeholder="例如：新北市新店區中正路 456 號">
                             </div>
 
                             <div class="col-md-12">
@@ -112,7 +126,9 @@
                             <!-- 其他資訊：機具、車號、司機姓名、備註（非必填，可自行調整） -->
                             <div class="col-md-4">
                                 <label for="machine" class="form-label">機具</label>
-                                <input type="text" class="form-control" name="machine" id="machine" placeholder="例如：挖土機">
+                                <select class="form-select" name="machine" id="machine">
+                                    <option value="">— 選擇機具 —</option>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label for="vehicleNumber" class="form-label">車號</label>
@@ -120,7 +136,9 @@
                             </div>
                             <div class="col-md-4">
                                 <label for="driverName" class="form-label">司機姓名</label>
-                                <input type="text" class="form-control" name="driverName" id="driverName" placeholder="司機">
+                                <select class="form-select" name="driverName" id="driverName">
+                                    <option value="">— 選擇司機 —</option>
+                                </select>
                             </div>
                             <div class="col-md-12">
                                 <label for="remark" class="form-label">備註</label>
@@ -174,91 +192,98 @@
         </div>
     </div>
 
-    <!-- 旗標需最先載入以便 API 動態選擇資料來源 -->
-        <script type="module" src="js/config-flags.js?v=20251010"></script>
-        <!-- 頁面層級保險：若快取或多份檔案導致 USE_MOCK_DATA 非預期，這裡強制覆寫為 true -->
-        <script>
-            window.APP_FLAGS = Object.assign({}, window.APP_FLAGS, { USE_MOCK_DATA: true });
-            console.info('[Flags][override@new-delivery] USE_MOCK_DATA =', window.APP_FLAGS?.USE_MOCK_DATA);
-        </script>
-    <!-- 離線管理與新增簽單腳本 -->
-    <script type="module" src="js/offline.js"></script>
-    <script type="module" src="js/new-delivery.js"></script>
-    <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
-    <script type="module" src="js/auth-guard.js"></script>
-        <script type="module" src="js/tools/seed-drivers.js"></script>
-        <!-- 先行顯示多選區塊（即使後續 API 匯入失敗，也能看見區塊與載入提示） -->
+        <script type="module" src="js/config-flags.js?v=20251025"></script>
+        <script type="module" src="js/machines-ui.js?v=20251024b"></script>
+        <script type="module" src="js/drivers-ui.js?v=20251023"></script>
+        <script type="module" src="js/offline.js?v=20251023"></script>
+        <script type="module" src="js/new-delivery.js?v=20251025"></script>
+        <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
+        <script type="module" src="js/auth-guard.js"></script>
             <script type="module">
-                const FLAGS_PRE = window.APP_FLAGS || {};
-            const mm = document.getElementById('multiMachineSection');
-            const md = document.getElementById('multiDriverSection');
-                if (FLAGS_PRE.ENABLE_MULTI_MACHINE) mm?.classList.remove('d-none');
-                if (FLAGS_PRE.ENABLE_MULTI_DRIVER) md?.classList.remove('d-none');
-            // 在 Console 打印旗標，方便排查是否載入正確
-                console.info('[MultiSelect] flags(pre)=', FLAGS_PRE);
-        </script>
-        <!-- 再載入 API 並渲染清單 -->
-            <script type="module">
-                import { listActiveMachines, listAllMachines, listActiveDrivers, listAllDrivers } from './js/api/index.js';
-            const FLAGS = window.APP_FLAGS || {};
+                import { listActiveMachines, listAllMachines, listActiveDrivers } from './js/api/index.js';
 
-            async function renderMachines() {
-                if (!FLAGS.ENABLE_MULTI_MACHINE) return;
-                const wrap = document.getElementById('machinesOptions');
-                const loading = document.getElementById('machinesLoading');
-                if (!wrap) return;
-                loading?.classList.remove('d-none');
-                try {
-                    const useActive = FLAGS.ENABLE_MACHINE_DEACTIVATE_FILTER !== false;
-                    const items = useActive ? await listActiveMachines() : await listAllMachines();
-                    wrap.innerHTML = '';
-                    items.forEach((m) => {
-                        const col = document.createElement('div');
-                        col.className = 'col-12 col-md-6';
-                        col.innerHTML = `
-                            <label class="form-check small">
-                                <input type="checkbox" class="form-check-input" data-id="${m.id}" data-name="${m.name}">
-                                <span class="form-check-label">${m.name}</span>
-                            </label>`;
-                        wrap.appendChild(col);
-                    });
-                } catch (e) {
-                    wrap.innerHTML = `<div class="text-danger small">載入機具失敗：${e.message || e}</div>`;
-                } finally {
-                    loading?.classList.add('d-none');
+            async function waitForFlags(timeout = 1200) {
+                const start = Date.now();
+                while (typeof window.APP_FLAGS === 'undefined' && (Date.now() - start) < timeout) {
+                    await new Promise(resolve => setTimeout(resolve, 40));
+                }
+                return window.APP_FLAGS || {};
+            }
+
+            async function renderOptions() {
+                const flags = await waitForFlags();
+                const enableMultiMachine = !!flags.ENABLE_MULTI_MACHINE;
+                const enableMultiDriver = !!flags.ENABLE_MULTI_DRIVER;
+
+                const machineSection = document.getElementById('multiMachineSection');
+                const driverSection = document.getElementById('multiDriverSection');
+                if (enableMultiMachine) machineSection?.classList.remove('d-none');
+                if (enableMultiDriver) driverSection?.classList.remove('d-none');
+                console.info('[MultiSelect] flags=', flags);
+
+                if (enableMultiMachine) {
+                    const wrap = document.getElementById('machinesOptions');
+                    const loading = document.getElementById('machinesLoading');
+                    if (wrap) {
+                        loading?.classList.remove('d-none');
+                        try {
+                            const useActive = flags.ENABLE_MACHINE_DEACTIVATE_FILTER !== false;
+                            const items = useActive ? await listActiveMachines() : await listAllMachines();
+                            wrap.innerHTML = '';
+                            items.forEach((m) => {
+                                const col = document.createElement('div');
+                                col.className = 'col-12 col-md-6';
+                                col.innerHTML = `
+                                    <label class="form-check small">
+                                        <input type="checkbox" class="form-check-input" data-id="${m.id}" data-name="${m.name}">
+                                        <span class="form-check-label">${m.name}</span>
+                                    </label>`;
+                                wrap.appendChild(col);
+                            });
+                        } catch (error) {
+                            wrap.innerHTML = `<div class="text-danger small">載入機具失敗：${error.message || error}</div>`;
+                        } finally {
+                            loading?.classList.add('d-none');
+                        }
+                    }
+                }
+
+                        if (enableMultiDriver) {
+                    const wrap = document.getElementById('driversOptions');
+                    const loading = document.getElementById('driversLoading');
+                    if (wrap) {
+                        loading?.classList.remove('d-none');
+                        try {
+                                    const items = await listActiveDrivers();
+                            wrap.innerHTML = '';
+                            items.forEach((d) => {
+                                const displayName = d.displayName || d.name || '';
+                                const col = document.createElement('div');
+                                const docIdAttr = d.docId ? ` data-doc-id="${d.docId}"` : '';
+                                col.className = 'col-12 col-md-6';
+                                col.innerHTML = `
+                                    <label class="form-check small">
+                                        <input type="checkbox" class="form-check-input" data-id="${d.id}" data-uid="${d.id}" data-name="${displayName}" data-display="${displayName}"${docIdAttr}>
+                                        <span class="form-check-label">${displayName}</span>
+                                    </label>`;
+                                wrap.appendChild(col);
+                            });
+                        } catch (error) {
+                            wrap.innerHTML = `<div class="text-danger small">載入司機失敗：${error.message || error}</div>`;
+                        } finally {
+                            loading?.classList.add('d-none');
+                        }
+                    }
                 }
             }
 
-                    async function renderDrivers() {
-                if (!FLAGS.ENABLE_MULTI_DRIVER) return;
-                const wrap = document.getElementById('driversOptions');
-                const loading = document.getElementById('driversLoading');
-                if (!wrap) return;
-                loading?.classList.remove('d-none');
-                try {
-                    const useActive = true; // 司機預設僅顯示 isActive
-                    const items = useActive ? await listActiveDrivers() : await listAllDrivers();
-                    wrap.innerHTML = '';
-                    items.forEach((d) => {
-                        const col = document.createElement('div');
-                        col.className = 'col-12 col-md-6';
-                        col.innerHTML = `
-                            <label class="form-check small">
-                                <input type="checkbox" class="form-check-input" data-id="${d.id}" data-name="${d.displayName}" data-display="${d.displayName}">
-                                <span class="form-check-label">${d.displayName}</span>
-                            </label>`;
-                        wrap.appendChild(col);
-                    });
-                } catch (e) {
-                    wrap.innerHTML = `<div class="text-danger small">載入司機失敗：${e.message || e}</div>`;
-                } finally {
-                    loading?.classList.add('d-none');
-                }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    renderOptions().catch(err => console.warn('[MultiSelect] render error', err));
+                });
+            } else {
+                renderOptions().catch(err => console.warn('[MultiSelect] render error', err));
             }
-
-                    document.addEventListener('DOMContentLoaded', async () => {
-                        await Promise.all([renderMachines(), renderDrivers()]);
-                    });
         </script>
 </body>
 </html>

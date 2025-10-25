@@ -4,13 +4,33 @@ import * as machinesMock from './machines-api.mock.js';
 import * as machinesFirestore from './machines-api.firestore.js';
 import * as driversMock from './drivers-api.mock.js';
 import * as driversFirestore from './drivers-api.firestore.js';
+import * as deliveriesMock from './deliveries-api.mock.js';
+import * as deliveriesFirestore from './deliveries-api.firestore.js';
 
-// 動態判斷而不是載入時鎖死，避免 config-flags.js 尚未載入造成永遠使用 mock
+async function waitForFlags(timeout = 1000) {
+	const start = Date.now();
+	while (typeof window.APP_FLAGS === 'undefined' && (Date.now() - start) < timeout) {
+		await new Promise(r => setTimeout(r, 30));
+	}
+	return window.APP_FLAGS;
+}
+
+// 動態判斷而不是載入時鎖死；支援 Runtime Override（Console 可即時改變）
+function runtimeOverride() {
+	const src = window.APP_RUNTIME?.FORCE_API_SOURCE;
+	if (src === 'mock') return true;
+	if (src === 'firestore') return false;
+	return null; // 無覆寫
+}
+
 function useMock() {
+	const o = runtimeOverride();
+	if (o !== null) return o; // 以 Console 覆寫優先
 	return (window.APP_FLAGS?.USE_MOCK_DATA) === true;
 }
 function m() { return useMock() ? machinesMock : machinesFirestore; }
 function d() { return useMock() ? driversMock : driversFirestore; }
+function dn() { return useMock() ? deliveriesMock : deliveriesFirestore; }
 
 export function getApiSource() { return useMock() ? 'mock' : 'firestore'; }
 export const API_SOURCE = getApiSource(); // 向後相容（初次載入顯示）
@@ -29,9 +49,23 @@ export const listActiveDrivers = (...a) => d().listActiveDrivers(...a);
 export const listAllDrivers    = (...a) => d().listAllDrivers(...a);
 export const createDriver      = (...a) => d().createDriver(...a);
 export const updateDriver      = (...a) => d().updateDriver(...a);
+export const deleteDriver      = (...a) => d().deleteDriver(...a);
+// managers (users with role=='manager') — 轉發到 drivers module 實作（drivers-api.* 使用 users collection）
+export const listActiveManagers = (...a) => d().listActiveManagers ? d().listActiveManagers(...a) : Promise.resolve([]);
+export const listAllManagers    = (...a) => d().listAllManagers ? d().listAllManagers(...a) : Promise.resolve([]);
+
+// 簽單（deliveryNotes）API ------------------------------------------------------
+export const createDelivery            = (...a) => dn().createDelivery(...a);
+export const listHistoryDeliveries     = (...a) => dn().listHistoryDeliveries(...a);
+export const listPendingDeliveries     = (...a) => dn().listPendingDeliveries(...a);
 
 // 暴露整體模組（提供測試 / mock 重置等工具）；使用 getter 取得來源資訊
 export const machines = { get __source() { return getApiSource(); }, ...machinesMock, ...machinesFirestore };
 export const drivers  = { get __source() { return getApiSource(); }, ...driversMock, ...driversFirestore };
+export const deliveries = { get __source() { return getApiSource(); }, ...deliveriesMock, ...deliveriesFirestore };
 
-console.info(`[API] 目前資料來源 = ${getApiSource()} (動態判斷)`);
+// 為避免 flags 尚未就緒時印出誤導訊息，延後到 flags 載入後再顯示一次來源
+(async () => {
+	await waitForFlags(1000);
+	console.info(`[API] 目前資料來源 = ${getApiSource()} (依 config-flags.js)`);
+})();

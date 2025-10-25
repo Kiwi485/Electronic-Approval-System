@@ -2,10 +2,79 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function userRole() {
+      return isAuthenticated()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isManager() {
+      return userRole() == 'manager';
+    }
+
+    function canAccessNote(data) {
+      return data != null && (
+        (data.readableBy != null && request.auth.uid in data.readableBy) ||
+        (data.assignedTo != null && request.auth.uid in data.assignedTo) ||
+        data.createdBy == request.auth.uid
+      );
+    }
+
+    match /deliveryNotes/{noteId} {
+      allow create: if isAuthenticated() && (
+        isManager() ||
+        (
+          request.resource.data.createdBy == request.auth.uid &&
+          canAccessNote(request.resource.data)
+        )
+      );
+
+      allow read: if isAuthenticated() && (
+        isManager() || canAccessNote(resource.data)
+      );
+
+      allow update: if isAuthenticated() && (
+        isManager() || (
+          canAccessNote(resource.data) &&
+          canAccessNote(request.resource.data) &&
+          request.resource.data.createdBy == resource.data.createdBy &&
+          request.resource.data.assignedTo == resource.data.assignedTo &&
+          request.resource.data.readableBy == resource.data.readableBy
+        )
+      );
+
+      allow delete: if isManager();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        isManager() ||
+        request.auth.uid == userId ||
+        (resource != null && resource.data.role == 'driver')
+      );
+      allow create: if isManager();
+      allow update: if isManager();
+      allow delete: if isManager();
+    }
+
+    match /machineCategories/{catId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isManager();
+      allow delete: if isManager();
+    }
+
+    match /machines/{machineId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isManager();
+      allow delete: if isManager();
+    }
+
     match /{document=**} {
-      allow read: if request.auth != null;
-      // TODO: 角色強化，限制僅管理者可寫入
-      allow write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

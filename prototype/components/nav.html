@@ -11,7 +11,7 @@
         </button>
         <!-- 右側功能按鈕 -->
         <div class="d-flex align-items-center">
-            <div class="dropdown me-2">
+            <div class="dropdown me-2 role-manager-only">
                 <button class="btn btn-primary position-relative" type="button" data-bs-toggle="dropdown">
                     <i class="bi bi-bell"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
@@ -28,10 +28,10 @@
                     <span class="d-none d-md-inline">王小明</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
-                    <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+                    <li class="role-manager-only"><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+                    <li class="role-manager-only"><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="index.html"><i class="bi bi-house me-2"></i>回到首頁</a></li>
+                    <li class="role-manager-only"><a class="dropdown-item" href="index.html"><i class="bi bi-house me-2"></i>回到首頁</a></li>
                     <li><a class="dropdown-item text-danger" href="login.html"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
                 </ul>
             </div>
@@ -49,24 +49,49 @@
                     <i class="bi bi-house-door me-2"></i>回到首頁
                 </a>
             </li>
+
             <li class="nav-item">
                 <a class="nav-link py-3" href="new-delivery.html">
                     <i class="bi bi-plus-circle me-2"></i>新增簽單
                 </a>
             </li>
+
             <li class="nav-item">
                 <a class="nav-link py-3" href="history.html">
                     <i class="bi bi-clock-history me-2"></i>歷史紀錄
                 </a>
             </li>
-            <li class="nav-item">
+
+            <li class="nav-item role-manager-only">
                 <a class="nav-link py-3" href="customers.html">
                     <i class="bi bi-people me-2"></i>客戶管理
                 </a>
             </li>
-            <li class="nav-item">
+
+            <li class="nav-item role-manager-only">
                 <a class="nav-link py-3" href="reports.html">
                     <i class="bi bi-graph-up me-2"></i>報表分析
+                </a>
+            </li>
+
+            <!-- 司機管理 -->
+            <li class="nav-item role-manager-only">
+                <a class="nav-link py-3" href="driver-admin.html">
+                    <i class="bi bi-people me-2"></i>司機管理
+                </a>
+            </li>
+
+            <!-- 管理類別入口 (後台) -->
+            <li class="nav-item role-manager-only">
+                <a class="nav-link py-3" href="machine-admin.html">
+                    <i class="bi bi-tools me-2"></i>機具管理
+                </a>
+            </li>
+
+            <!-- 簽章管理 / 簽章頁 -->
+            <li class="nav-item">
+                <a class="nav-link py-3" href="sign-delivery.html">
+                    <i class="bi bi-pencil-square me-2"></i>簽章簽單
                 </a>
             </li>
         </ul>
@@ -75,7 +100,7 @@
 
 <!-- 行動版底部導航 -->
 <nav class="mobile-nav">
-    <div class="d-flex justify-content-around py-2">
+    <div class="nav-links d-flex justify-content-around py-2">
         <a href="index.html" class="btn btn-link text-primary">
             <i class="bi bi-house-door"></i>
             <small class="d-block">首頁</small>
@@ -88,9 +113,27 @@
             <i class="bi bi-clock-history"></i>
             <small class="d-block">歷史</small>
         </a>
-        <a href="profile.html" class="btn btn-link text-secondary">
+        <a href="profile.html" class="btn btn-link text-secondary role-manager-only">
             <i class="bi bi-person"></i>
             <small class="d-block">我的</small>
+        </a>
+
+        <!-- 司機管理 -->
+        <a href="driver-admin.html" class="btn btn-link text-secondary role-manager-only">
+            <i class="bi bi-people"></i>
+            <small class="d-block">司機</small>
+        </a>
+
+        <a href="machine-admin.html" class="btn btn-link text-secondary role-manager-only">
+            <i class="bi bi-tools"></i>
+            <small class="d-block">機具</small>
+        </a>
+
+
+        <!-- 簽章（行動版） -->
+        <a href="sign-delivery.html" class="btn btn-link text-secondary">
+            <i class="bi bi-pencil-square"></i>
+            <small class="d-block">簽章</small>
         </a>
     </div>
 </nav>

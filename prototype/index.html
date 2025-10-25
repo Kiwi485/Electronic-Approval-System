@@ -17,7 +17,7 @@
                 <i class="bi bi-clipboard-check me-2"></i>智慧簽單系統
             </a>
             <div class="d-flex align-items-center">
-                <div class="dropdown me-2">
+                <div class="dropdown me-2 role-manager-only">
                     <button class="btn btn-primary position-relative" type="button" data-bs-toggle="dropdown">
                         <i class="bi bi-bell"></i>
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
@@ -35,8 +35,8 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li class="dropdown-item-text small text-muted d-flex align-items-center"><i class="bi bi-person-circle me-2"></i><span id="currentUserEmail">—</span></li>
-                        <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
-                        <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
                     </ul>
@@ -47,43 +47,8 @@
 
     <div class="container-fluid">
         <div class="row">
-            <!-- 左側選單 -->
-            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
-                <div class="position-sticky pt-3">
-                    <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link active py-3" href="index.html">
-                                <i class="bi bi-house-door me-2"></i>首頁
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-3" href="new-delivery.html">
-                                <i class="bi bi-plus-circle me-2"></i>新增簽單
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-3" href="history.html">
-                                <i class="bi bi-clock-history me-2"></i>歷史紀錄
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-3" href="customers.html">
-                                <i class="bi bi-people me-2"></i>客戶管理
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-3" href="reports.html">
-                                <i class="bi bi-graph-up me-2"></i>報表分析
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-3" href="sign-delivery.html">
-                                <i class="bi bi-pencil-square me-2"></i>簽章簽單
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
+            <!-- 共用側欄：由 js/include-nav.js 動態載入 components/nav.html 的 sidebar -->
+            <script type="module" src="js/include-nav.js?v=20251024d"></script>
 
             <!-- 主要內容區 -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
@@ -102,10 +67,10 @@
                         <div class="card card-dashboard h-100 bg-info text-white">
                             <div class="card-body">
                                 <h5 class="card-title d-flex justify-content-between">
-                                    <span>今日工作</span>
+                                    <span>今日簽單</span>
                                     <i class="bi bi-calendar-check"></i>
                                 </h5>
-                                <p class="display-4 mb-0">5</p>
+                                <p class="display-4 mb-0">0</p>
                                 <small>待處理任務</small>
                             </div>
                         </div>
@@ -117,7 +82,7 @@
                                     <span>待簽核</span>
                                     <i class="bi bi-pen"></i>
                                 </h5>
-                                <p class="display-4 mb-0">3</p>
+                                <p class="display-4 mb-0">0</p>
                                 <small>等待客戶簽核</small>
                             </div>
                         </div>
@@ -129,7 +94,7 @@
                                     <span>本週完成</span>
                                     <i class="bi bi-check-circle"></i>
                                 </h5>
-                                <p class="display-4 mb-0">12</p>
+                                <p class="display-4 mb-0">0</p>
                                 <small>已完成工作</small>
                             </div>
                         </div>
@@ -141,7 +106,7 @@
                                     <span>未收款</span>
                                     <i class="bi bi-cash-stack"></i>
                                 </h5>
-                                <p class="display-4 mb-0">8</p>
+                                <p class="display-4 mb-0">0</p>
                                 <small>待處理款項</small>
                             </div>
                         </div>
@@ -151,7 +116,7 @@
                 <!-- 今日工作列表 -->
                 <div class="card mb-4">
                     <div class="card-header bg-white">
-                        <h5 class="card-title mb-0">今日工作</h5>
+                        <h5 class="card-title mb-0">今日簽單</h5>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -168,30 +133,7 @@
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>WO-2025091401</td>
-                                        <td>台北營造公司</td>
-                                        <td>台北市信義區忠孝東路五段</td>
-                                        <td>09:30</td>
-                                        <td><span class="badge bg-warning">待執行</span></td>
-                                        <td>
-                                            <div class="btn-group">
-                                                <button class="btn btn-sm btn-outline-primary">開始工作</button>
-                                                <button class="btn btn-sm btn-outline-secondary">詳細資訊</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>WO-2025091402</td>
-                                        <td>新北工程行</td>
-                                        <td>新北市板橋區文化路一段</td>
-                                        <td>14:00</td>
-                                        <td><span class="badge bg-info">進行中</span></td>
-                                        <td>
-                                            <div class="btn-group">
-                                                <button class="btn btn-sm btn-outline-success">完成工作</button>
-                                                <button class="btn btn-sm btn-outline-secondary">詳細資訊</button>
-                                            </div>
-                                        </td>
+                                        <td colspan="6" class="text-center text-muted">今日無簽單</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -205,41 +147,16 @@
                         <h5 class="card-title mb-0">最近完成</h5>
                     </div>
                     <div class="card-body">
-                        <div class="list-group">
-                            <a href="#" class="list-group-item list-group-item-action">
-                                <div class="d-flex w-100 justify-content-between align-items-center">
-                                    <div>
-                                        <h6 class="mb-1">台中廠房清運作業</h6>
-                                        <p class="mb-1 text-muted">完成廠房廢料清運，客戶已簽核確認</p>
-                                        <small class="text-success">
-                                            <i class="bi bi-check-circle me-1"></i>已完成收款
-                                        </small>
-                                    </div>
-                                    <small class="text-muted">今天 08:30</small>
-                                </div>
-                            </a>
-                            <a href="#" class="list-group-item list-group-item-action">
-                                <div class="d-flex w-100 justify-content-between align-items-center">
-                                    <div>
-                                        <h6 class="mb-1">高雄港區搬運工程</h6>
-                                        <p class="mb-1 text-muted">大型器械搬運完成，等待核銷作業</p>
-                                        <small class="text-warning">
-                                            <i class="bi bi-clock me-1"></i>待收款處理
-                                        </small>
-                                    </div>
-                                    <small class="text-muted">昨天 16:45</small>
-                                </div>
-                            </a>
-                        </div>
+                        <div class="list-group"><div class="text-muted small p-3">目前沒有最近完成的簽單</div></div>
                     </div>
                 </div>
             </main>
         </div>
     </div>
 
-    <!-- 行動版導航 -->
+    <!-- 行動版底部導航 -->
     <nav class="mobile-nav">
-        <div class="d-flex justify-content-around py-2">
+        <div class="nav-links d-flex justify-content-around py-2">
             <a href="index.html" class="btn btn-link text-primary">
                 <i class="bi bi-house-door"></i>
                 <small class="d-block">首頁</small>
@@ -252,10 +169,21 @@
                 <i class="bi bi-clock-history"></i>
                 <small class="d-block">歷史</small>
             </a>
-            <a href="profile.html" class="btn btn-link text-secondary">
+            <a href="profile.html" class="btn btn-link text-secondary role-manager-only">
                 <i class="bi bi-person"></i>
                 <small class="d-block">我的</small>
             </a>
+
+            <a href="driver-admin.html" class="btn btn-link text-secondary role-manager-only">
+                <i class="bi bi-people"></i>
+                <small class="d-block">司機管理</small>
+            </a>
+
+            <a href="machine-admin.html" class="btn btn-link text-secondary role-manager-only">
+                <i class="bi bi-tools"></i>
+                <small class="d-block">機具</small>
+            </a>
+
             <a href="sign-delivery.html" class="btn btn-link text-secondary">
                 <i class="bi bi-pencil-square"></i>
                 <small class="d-block">簽章</small>
@@ -267,6 +195,8 @@
     <!-- 旗標需最先載入（此頁只有一個 module, 放在 auth-guard 前） -->
     <script type="module" src="./js/config-flags.js"></script>
     <script type="module" src="./js/auth-guard.js"></script>
+    <!-- 首頁儀表：直接接 Firestore（不受 Mock 影響） -->
+    <script type="module" src="./js/index-dashboard.js"></script>
     
 </body>
 </html>
