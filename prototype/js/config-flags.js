@@ -1,24 +1,20 @@
 // 全域功能旗標 (Feature Flags)
 // 可依開發 / 測試 / 上線調整。後續若導入更正式的設定，可改由 Firestore Remote Config 或環境檔。
-<<<<<<< HEAD
 window.APP_FLAGS = {
   // 使用 mock 資料 (true) 或真實 Firestore (false)
   USE_MOCK_DATA: true,
   // 是否啟用多機具 UI 與 payload 寫入 machines[]
-=======
-// 初始旗標（預設以 Firestore 為使用情境）
-const DEFAULT_FLAGS = {
-  USE_MOCK_DATA: false,
->>>>>>> 79bb55ed8ca216558de2adabbc926ca09dc9b7bf
   ENABLE_MULTI_MACHINE: true,
   ENABLE_MULTI_DRIVER: true,
-<<<<<<< HEAD
   // 是否在簽單建立頁面過濾掉停用 (isActive=false) 的機具
   ENABLE_MACHINE_DEACTIVATE_FILTER: true,
   // （預留）是否顯示資料遷移工具按鈕
-=======
+// 初始旗標（預設以 Firestore 為使用情境）
+const DEFAULT_FLAGS = {
+  USE_MOCK_DATA: false,
+  ENABLE_MULTI_MACHINE: true,
+  ENABLE_MULTI_DRIVER: true,
   ENABLE_MACHINE_DEACTIVATE_FILTER: false,
->>>>>>> 79bb55ed8ca216558de2adabbc926ca09dc9b7bf
   ENABLE_MIGRATION_TOOL: true
 };
 

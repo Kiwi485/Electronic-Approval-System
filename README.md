@@ -1422,3 +1422,222 @@ firebase use --add electronic-approval-dev
 
 
 
+
+---
+
+
+## 🧩 使用 VS Code + Copilot 解決 Merge Conflict 指南
+
+在團隊開發中，如果 main 分支已更新，而你在自己的分支也有修改，  
+當你進行 `git pull`、`git merge` 或 `git rebase` 時，可能會出現 **merge conflict（合併衝突）**。
+
+以下是標準解法與建議流程 👇
+
+---
+
+### ⚙️ 一、更新並切回自己的分支
+```bash
+# 1️⃣ 更新 main 分支
+git checkout main
+git pull origin main
+
+# 2️⃣ 回到自己的分支
+git checkout feature/your-branch-name
+
+# 3️⃣ 把最新 main 合併進來
+git rebase main        #（推薦，歷史乾淨）
+# 或者：
+git merge main         #（操作簡單）
+````
+
+---
+
+### 💥 二、發生 Conflict 時會看到
+
+在 VS Code 裡會自動顯示類似：
+
+```text
+<<<<<<< HEAD
+// 你目前分支的內容
+=======
+// main 分支的內容
+>>>>>>> main
+```
+
+同時上方會出現工具列按鈕：
+
+* `Accept Current Change`（保留你自己的）
+* `Accept Incoming Change`（保留 main 的）
+* `Accept Both Changes`（保留兩邊）
+* `Compare Changes`（對比查看）
+
+---
+
+### 🤖 三、使用 Copilot 協助整合
+
+> **需要安裝 VS Code Insiders + GitHub Copilot Chat 插件**
+
+1️⃣ 開啟衝突檔案
+2️⃣ 打開 Copilot Chat 視窗（快捷鍵：`Ctrl + I` 或 `Ctrl + /`）
+3️⃣ 輸入提示（中英文都可以）：
+
+```
+Explain this merge conflict and suggest a merged version that keeps both changes.
+```
+
+或
+
+```
+幫我整合這段衝突，保留新 main 的修改但不要刪掉我原本的功能。
+```
+
+4️⃣ Copilot 會生成建議合併結果，你可以：
+
+* 點 **Apply Suggestion** 套用
+* 或手動複製貼上覆蓋衝突區塊
+
+---
+
+### 🧪 四、確認與繼續
+
+修完衝突後執行：
+
+```bash
+git add .
+git rebase --continue    # 若你是 rebase
+# 或
+git commit               # 若你是 merge
+```
+
+最後重新測試：
+
+```bash
+npm run dev
+```
+
+確定功能正常後推回遠端：
+
+```bash
+git push origin feature/your-branch-name --force
+```
+
+---
+
+### 💡 五、Tips
+
+| 狀況           | 建議                           |
+| ------------ | ---------------------------- |
+| 衝突只是註解或空格    | 直接用「Accept Both Changes」     |
+| 同一函式邏輯不同     | 用 Copilot 幫你合併後，再自己檢查邏輯      |
+| rebase 太亂、搞錯 | 可用 `git rebase --abort` 回復原狀 |
+| 不想改歷史        | 改用 `git merge main` 即可       |
+
+---
+
+### ✅ 總結
+
+> 每次 main 更新後，記得先拉最新版本、rebase 一次、
+> 用 Copilot 幫忙整合衝突，
+> 測試沒問題再 push，這樣團隊協作會最順。
+
+---
+
+我會給你一份可直接複製給隊友的「How to use（怎麼使用）」指南（Markdown），包含一步步命令、驗證與常見故障排除，讓隊友能在本機 Emulator 上啟動並執行 seeder 建立 Auth 與 Firestore `users`。下面先列出主要步驟，接著是完整可貼上的內容。
+
+主要步驟（簡短）
+- 啟動 Firebase Emulator（使用 repo 預設 project `electronic-approval-dev`）
+- 在新的 PowerShell 視窗設定環境變數並執行 admin seeder
+- 用 list-users.js 驗證 Auth 使用者
+- 在 Emulator UI 檢查 Auth 與 Firestore
+- 常見問題與解法
+
+--- 以下為可直接複製給隊友的 Markdown 指南 ---
+
+## 本機 Emulator 使用指南（給隊友）
+
+說明：這份指南示範如何在本機 Firebase Emulator 上使用 repo 預設 project（`electronic-approval-dev`），並執行 admin seeder 建立 Authentication 帳號與對應的 Firestore `users/{uid}` 文件。
+
+### 先備條件
+- 安裝 Firebase CLI（支援 emulators）
+- Node.js 可執行 `node`
+- 在專案根目錄（含 .firebaserc 與 firebase.json）
+
+參考檔案：
+- dev-seed-users.js（admin seeder：會 建立 Auth 帳號並寫入 Firestore users）
+- list-users.js（檢視 emulator Auth 使用者的 helper）
+- dev-seed.js（前端 seeder，可用於 browser console）
+
+---
+
+### 1) 啟動 Emulator（使用 repo 預設 project）
+在專案根目錄，執行（PowerShell）：
+```powershell
+firebase emulators:start 
+
+若 emulator 已在執行，請先在該 terminal 按 Ctrl+C 停止，再以上述指令重啟。
+
+---
+
+### 2) 在新的 PowerShell 視窗設定環境變數並執行 seeder
+在新的 PowerShell 視窗設定 env 並執行 seeder（`--force` 可覆寫既有角色）：
+```powershell
+$env:FIRESTORE_EMULATOR_HOST="localhost:8080"
+$env:FIREBASE_AUTH_EMULATOR_HOST="localhost:9099"
+$env:GCLOUD_PROJECT="electronic-approval-dev"
+npm install firebase-admin
+node .\prototype\js\tools\dev-seed-users.js --force
+```
+檢查 seeder 輸出，確認有列出 `[Env] GCLOUD_PROJECT: electronic-approval-dev` 與每位使用者的建立/略過訊息。
+
+---
+
+### 3) 驗證 Auth 使用者（CLI）
+Seeder 完成後，使用同一個環境執行：
+```powershell
+node .\list-users.js
+```
+輸出會列出 emulator 裡的 Auth 使用者（uid、email、customClaims 等）。若有結果代表 seeder 成功建立帳號。
+
+---
+
+### 4) 在 Emulator UI 檢查
+打開並刷新 Emulator UI：
+- URL: http://127.0.0.1:4000
+
+檢查項目：
+- Auth -> 使用者清單：應看到 seeder 建立的帳號
+- Firestore -> users collection：檢查 `users/{uid}` 是否存在，並包含 `role`, `email`, `displayName` 等欄位
+
+若 UI 沒顯示但 list-users.js 有內容，請在瀏覽器做硬性重新整理（Ctrl+F5）。
+
+---
+
+### 常見故障與解法
+- UI 顯示的 project 名稱不是 `electronic-approval-dev`：
+  - 停止 emulator 並以 `-P electronic-approval-dev` 重新啟動。
+- Seeder 日誌顯示不同的 `GCLOUD_PROJECT`：
+  - 檢查執行 seeder 的 PowerShell 是否有正確設定 `$env:GCLOUD_PROJECT="electronic-approval-dev"`。
+- list-users.js 沒列出使用者：
+  - 確認 `FIREBASE_AUTH_EMULATOR_HOST` 與 `FIRESTORE_EMULATOR_HOST` 指向 `localhost:9099` 與 `localhost:8080`。
+- 要覆寫已存在的角色或資料：
+  - 用 `--force` 參數重新執行 seeder，或手動在 seeder 中調整合併/覆寫邏輯。
+- 若想把 repo 預設 project alias 改成別名（例如 `iew`）：
+```powershell
+firebase use --add electronic-approval-dev
+# 互動式時輸入 alias，例如：iew
+```
+
+---
+
+### 一句話快速檢查表（給隊友）
+1. 啟動 emulator：`firebase emulators:start -P electronic-approval-dev --only auth,firestore`  
+2. 在新視窗設定 env 並執行 seeder：設定 three env（Auth/Firestore/GCLOUD_PROJECT）→ `node dev-seed-users.js --force`  
+3. 驗證：`node list-users.js` → 打開 http://127.0.0.1:4000 檢查 Auth / Firestore
+
+---
+
+
+
+
+
+
