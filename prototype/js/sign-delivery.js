@@ -1,9 +1,9 @@
 // sign-delivery.js - 單獨簽章頁面
 import { db } from '../firebase-init.js';
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
 import { storage } from '../firebase-init.js';
-import { offlineManager } from './offline.js';
+import { listPendingDeliveries } from './api/index.js';
 
 // 供離線使用的 key（最小變更：直接讀寫 localStorage）
 const OFFLINE_NOTES_KEY = 'offline_delivery_notes';
@@ -53,106 +53,131 @@ function setStatusBadge(status) {
   statusBadge.textContent = t;
 }
 
+const toIsoString = (value) => {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return value;
+};
+
+const normalizeNote = (raw) => {
+  if (!raw) return null;
+  const id = raw.id || raw.docId || raw.localId;
+  if (!id) return null;
+  const data = { ...raw, id };
+  data.serverCreatedAt = toIsoString(raw.serverCreatedAt);
+  data.createdAt = toIsoString(raw.createdAt);
+  data.signedAt = toIsoString(raw.signedAt);
+  return data;
+};
+
+const sortByNewest = (a, b) => {
+  const getTime = (item) => new Date(item?.serverCreatedAt || item?.createdAt || 0).getTime();
+  return getTime(b) - getTime(a);
+};
+
+async function loadPendingList() {
+  logDebug('loadPendingList start');
+  if (!pendingListEl) return;
+  pendingListEl.innerHTML = '';
+  pendingListEl.style.display = 'none';
+  pendingLoadingEl?.classList.remove('d-none');
+  if (pendingLoadingEl) pendingLoadingEl.style.display = 'block';
+  noPendingEl?.classList.add('d-none');
+
+  let items = [];
+  let errorMessage = null;
+
+  try {
+    const remote = await listPendingDeliveries(120);
+    const dedup = new Map();
+    (Array.isArray(remote) ? remote : []).forEach((entry) => {
+      const normalized = normalizeNote(entry);
+      if (!normalized) return;
+      dedup.set(normalized.id, normalized);
+    });
+    items = Array.from(dedup.values());
+  } catch (err) {
+    errorMessage = err?.message || err?.code || String(err);
+    logDebug('loadPendingList remote failed', { message: errorMessage });
+  }
+
+  if (items.length > 0) {
+    items.sort(sortByNewest);
+    items.forEach((item) => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+      const dateText = (item.date || item.createdAt || '').toString().split('T')[0];
+      const amountText = item.amount ? `NT$ ${item.amount}` : '-';
+      const hoursText = (item.totalHours ?? '-') + 'h';
+      li.innerHTML = `<div>
+          <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
+          <div class="text-muted small">日期: ${dateText || '-'} · 金額: ${amountText} · 工時: ${hoursText}</div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
+      li.addEventListener('click', (event) => {
+        const targetId = event.target.closest('button')?.getAttribute('data-id') || item.id;
+        selectPending(targetId);
+      });
+      pendingListEl.appendChild(li);
+    });
+  }
+
+  if (errorMessage) {
+    const li = document.createElement('li');
+    li.className = 'list-group-item text-danger';
+    li.textContent = `遠端載入失敗：${errorMessage}`;
+    pendingListEl.appendChild(li);
+  }
+
+  if (pendingListEl.children.length === 0) {
+    noPendingEl?.classList.remove('d-none');
+  }
+
+  if (pendingLoadingEl) {
+    pendingLoadingEl.style.display = 'none';
+    pendingLoadingEl.classList.add('d-none');
+  }
+  pendingListEl.style.display = 'block';
+
+  try {
+    injectLatestOffline();
+  } catch (err) {
+    logDebug('injectLatestOffline failed', { message: err?.message || err });
+  }
+
+  logDebug('loadPendingList done', { remoteCount: items.length, hasError: Boolean(errorMessage) });
+}
+
 async function loadNote(id) {
   if (!id) return;
   logDebug('loadNote start', { id });
-  if (loadError) loadError.classList.add('d-none');
+  currentLocalId = null;
   currentDocId = null;
-  noteSection.classList.add('d-none');
+  noteSection?.classList.add('d-none');
+  if (loadError) loadError.classList.add('d-none');
+
   try {
     const ref = doc(db, 'deliveryNotes', id);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      logDebug('note not found', { id });
+      logDebug('loadNote missing', { id });
       if (loadError) {
-        loadError.textContent = '找不到此簽單';
+        loadError.textContent = '找不到這筆簽單，請重新整理列表。';
         loadError.classList.remove('d-none');
       }
       return;
     }
-    const data = snap.data();
-    currentDocId = snap.id;
-    logDebug('note loaded', { id: snap.id });
-    renderNote(data);
-  } catch (e) {
-    console.error(e);
-    logDebug('loadNote error', { message: e.message, code: e.code });
+    const note = normalizeNote({ id, ...snap.data() });
+    currentDocId = id;
+    renderNote(note);
+    logDebug('loadNote success', { id });
+  } catch (err) {
+    logDebug('loadNote failed', { message: err?.message || err, code: err?.code });
     if (loadError) {
-      loadError.textContent = '載入失敗：' + e.message;
+      loadError.textContent = `載入簽單失敗：${err?.message || err}`;
       loadError.classList.remove('d-none');
     }
-  }
-}
-
-async function loadPendingList() {
-  logDebug('loadPendingList start');
-  pendingListEl.style.display = 'none';
-  pendingLoadingEl.style.display = 'block';
-  noPendingEl.classList.add('d-none');
-  pendingListEl.innerHTML = '';
-
-  // 先把離線待簽項目插到清單頂端（黃色），確保離線也能立刻看到
-  try { injectLatestOffline(); } catch (e) { logDebug('injectLatestOffline on load failed', { message: e.message }); }
-  let timeoutHit = false;
-  const to = setTimeout(() => {
-    timeoutHit = true;
-    logDebug('pendingList timeout fallback triggered (5s)');
-    pendingLoadingEl.innerHTML = '<span class="text-warning small">載入逾時，嘗試較簡單查詢...</span>';
-  }, 5000);
-  try {
-    // 取最新 100 筆待簽章 (可調整)
-    const q = query(
-      collection(db, 'deliveryNotes'),
-      where('signatureStatus', '==', 'pending'),
-      orderBy('serverCreatedAt', 'desc'),
-      limit(100)
-    );
-    let snap;
-    try {
-      snap = await getDocs(q);
-    } catch (err) {
-      logDebug('primary query failed', { code: err.code, message: err.message });
-      // 可能是沒有建立複合索引 或 serverCreatedAt 尚未存在 → 改用較寬鬆查詢 (僅 where)
-      const q2 = query(
-        collection(db, 'deliveryNotes'),
-        where('signatureStatus', '==', 'pending'),
-        limit(100)
-      );
-      snap = await getDocs(q2);
-      logDebug('fallback query used');
-    }
-    const items = [];
-    snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-    logDebug('pending count', { count: items.length });
-    if (items.length === 0 && pendingListEl.children.length === 0) {
-      noPendingEl.classList.remove('d-none');
-    } else {
-      items.forEach(item => {
-        const li = document.createElement('li');
-        li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-        const date = (item.date || item.createdAt || '').toString().split('T')[0];
-        li.innerHTML = `<div>
-            <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
-            <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
-          </div>
-          <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
-        li.addEventListener('click', (e) => {
-          // 若點到內部按鈕也一樣載入
-          const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id;
-          selectPending(targetId);
-        });
-        pendingListEl.appendChild(li);
-      });
-    }
-  } catch (e) {
-    console.error(e);
-    logDebug('loadPendingList error', { message: e.message, code: e.code });
-    pendingListEl.innerHTML = `<li class="list-group-item text-danger">載入失敗：${e.message}</li>`;
-  } finally {
-    clearTimeout(to);
-    pendingLoadingEl.style.display = 'none';
-    pendingListEl.style.display = 'block';
-    if (timeoutHit) logDebug('timeout ended after fallback');
   }
 }
 
@@ -163,6 +188,16 @@ function selectPending(id) {
 
 function renderNote(d) {
   noteSection.classList.remove('d-none');
+  const formatNames = (arr, fallback) => {
+    try {
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map(x => x?.name || x?.displayName || x?.id || '').filter(Boolean).join('、');
+      }
+    } catch {}
+    return fallback || '-';
+  };
+  const machinesText = formatNames(d.machines, d.machine || '-');
+  const driversText = formatNames(d.drivers, d.driverName || '-');
   const date = (d.date || d.createdAt || '').toString().split('T')[0];
   noteBody.innerHTML = `
     <div class="row g-2 small">
@@ -172,9 +207,9 @@ function renderNote(d) {
       <div class="col-md-12"><strong>作業狀況:</strong><br>${(d.work || '').replace(/\n/g,'<br>') || '-'}</div>
       <div class="col-md-4"><strong>時間:</strong> ${(d.startTime||'') + (d.endTime?(' ~ '+d.endTime):'')}</div>
       <div class="col-md-4"><strong>金額:</strong> ${d.amount? 'NT$ '+d.amount : '-'}</div>
-      <div class="col-md-4"><strong>機具:</strong> ${d.machine||'-'}</div>
+      <div class="col-md-4"><strong>機具:</strong> ${machinesText}</div>
       <div class="col-md-4"><strong>車號:</strong> ${d.vehicleNumber||'-'}</div>
-      <div class="col-md-4"><strong>司機:</strong> ${d.driverName||'-'}</div>
+      <div class="col-md-4"><strong>司機:</strong> ${driversText}</div>
       <div class="col-md-12"><strong>備註:</strong> ${(d.remark||'').replace(/\n/g,'<br>')||'-'}</div>
     </div>`;
   setStatusBadge(d.signatureStatus || 'pending');
@@ -430,6 +465,8 @@ function injectLatestOffline() {
 
   // 建立現有清單鍵集合，避免重覆插入
   const existingKeys = new Set();
+  if (!pendingListEl) return;
+
   pendingListEl.querySelectorAll('li').forEach(li => {
     const btn = li.querySelector('button');
     if (!btn) return;
@@ -462,8 +499,8 @@ function injectLatestOffline() {
   });
 
   if (injected > 0) {
-    pendingLoadingEl.style.display = 'none';
-    noPendingEl.classList.add('d-none');
+    if (pendingLoadingEl) pendingLoadingEl.style.display = 'none';
+    noPendingEl?.classList.add('d-none');
     pendingListEl.style.display = 'block';
     logDebug('injectLatestOffline injected', { injected });
   }

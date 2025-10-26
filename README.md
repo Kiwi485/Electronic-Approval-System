@@ -52,7 +52,32 @@
 
 ---
 
-## 📋 當前開發任務（Sprint 1）
+## � 角色授權與 Firestore 規則
+
+- **角色存放位置**：`users/{uid}` 文件中的 `role` 欄位（`manager` 或 `driver`）。
+- **前端行為**：
+  - 登入後自動載入使用者角色（`js/session-context.js`），並將 `<html data-user-role>` 設為 `manager` 或 `driver`。
+  - CSS 會隱藏 `.role-manager-only` 元素，讓司機僅看到「首頁 / 新增簽單 / 歷史 / 簽章」。
+  - 新增簽單時自動補上 `createdBy / createdByRole / assignedTo / readableBy`，確保 Firestore 規則可授權離線與線上資料。
+- **權限摘要**：
+  - `manager`：可讀寫全部 `deliveryNotes`、`users`；可指派/重派司機。
+  - `driver`：僅能讀寫 `readableBy` 或 `assignedTo` 含自己、或 `createdBy` 為自己的簽單；不得修改指派陣列。
+  - 其他集合預設拒絕。
+- **執行自動化規則測試**：
+  ```powershell
+  npm install
+  npm run test:rules
+  ```
+  測試腳本：`tests/firestore-rules/rules.test.js`（使用 Firebase Emulator + `@firebase/rules-unit-testing`）。
+- **手動驗收步驟**：
+  1. 啟動 Emulator：`firebase emulators:start`。
+  2. 使用 manager 帳號登入 → 可瀏覽所有頁面與簽單。
+  3. 使用 driver 帳號登入 → 導覽僅剩首頁/新增/歷史/簽章；嘗試直接開啟 `driver-admin.html` 應無資料；查看 Firestore Console 驗證只讀到自己的簽單。
+  4. 於 emulator UI 驗證 `deliveryNotes` 寫入的 `assignedTo/readableBy/createdBy` 欄位。
+
+---
+
+## �📋 當前開發任務（Sprint 1）
 🎯 **目標**：完成端到端 Demo  
 ⏳ **時程**：3–5 天  
 🏆 **成功標準**：能錄製 1 分鐘影片展示「登入 → 填表 → 簽名 → 送出 → History 查看」  
@@ -1077,6 +1102,323 @@ window.APP_FLAGS.USE_MOCK_DATA = true;
 ```
 
 ---
+
+## 🆕 簽單頁多機具 / 多司機（Issue #4）
+
+此功能讓新簽單支援同時選擇多個機具與多位司機，同時保持舊欄位用法不變（相容）。預設由 Feature Flags 控制，關閉時頁面不顯示新區塊、行為完全不變。
+
+### 功能旗標（`prototype/js/config-flags.js`）
+- `USE_MOCK_DATA: boolean` → 切換 Mock / Firestore 資料來源
+- `ENABLE_MULTI_MACHINE: boolean` → 顯示「機具多選」區塊並輸出 `machines[]`
+- `ENABLE_MULTI_DRIVER: boolean` → 顯示「司機多選」區塊並輸出 `drivers[]`
+- `ENABLE_MACHINE_DEACTIVATE_FILTER: boolean` → 啟用時，建立簽單頁只顯示 `isActive !== false` 的機具
+
+> 建議：開發/自動化驗收時開啟三個旗標，便於測試；切換到 Firestore 時請確認有實際資料。
+
+### UI 與檔案
+- `prototype/new-delivery.html`
+  - 當旗標開啟時顯示兩個新區塊：
+    - 選擇機具（可多選）：資料來源 `listActiveMachines()`（或 `listAllMachines()` 視旗標而定）
+    - 選擇司機（可多選）：資料來源 `listActiveDrivers()`
+  - 旗標關閉時，新區塊不顯示，頁面維持既有欄位（`machine`、`driverName`）
+
+### 表單收集與 Payload（`prototype/js/form-validation.js`）
+- 新增：
+  - `collectSelectedMachines()` → 回傳 `[{ id, name }]`
+  - `collectSelectedDrivers()` → 回傳 `[{ id, name }]`
+- 在 `buildValidatedPayload()` 中：
+  - 旗標開啟時：
+    - 會加入 `machines: []` 與/或 `drivers: []` 欄位（可為空陣列）
+    - 單一選擇時，若舊欄位為空，會自動將 `machine = machines[0].name`、`driverName = drivers[0].name`
+    - 多於 1 項選擇時，為避免誤導，舊欄位 `machine`/`driverName` 會保留空字串
+  - 旗標關閉時：不輸出陣列欄位，行為與 UI 完全維持原樣
+
+範例 Payload：
+
+單一選擇（1 機具 + 1 司機）：
+```json
+{
+  "customer":"台北營造公司",
+  "date":"2025-10-10",
+  "location":"內湖",
+  "work":"...",
+  "startTime":"09:00",
+  "endTime":"12:00",
+  "totalHours":3,
+  "amount":12000,
+  "machine":"挖土機",
+  "driverName":"王小明",
+  "machines":[{"id":"m1","name":"挖土機"}],
+  "drivers":[{"id":"d1","name":"王小明"}],
+  "signatureStatus":"pending"
+}
+```
+
+多選（≥2 機具 + ≥2 司機）：
+```json
+{
+  "customer":"台北營造公司",
+  "date":"2025-10-10",
+  "location":"內湖",
+  "work":"...",
+  "startTime":"09:00",
+  "endTime":"12:00",
+  "totalHours":3,
+  "amount":12000,
+  "machine":"",
+  "driverName":"",
+  "machines":[{"id":"m1","name":"挖土機"},{"id":"m2","name":"吊車"}],
+  "drivers":[{"id":"d1","name":"王小明"},{"id":"d2","name":"李小華"}],
+  "signatureStatus":"pending"
+}
+```
+
+### 簽章頁顯示（`prototype/js/sign-delivery.js`）
+- 顯示邏輯：
+  - 若文件含 `machines[]` / `drivers[]`，將 `name`/`displayName` 以「、」串接顯示
+  - 否則回退顯示舊欄位 `machine` / `driverName`
+  - 例：`機具：挖土機、吊車`；`司機：王小明、李小華`
+
+### 過濾策略
+- 旗標 `ENABLE_MACHINE_DEACTIVATE_FILTER=true` 時：
+  - 建立簽單頁載入機具改用 `listActiveMachines()`（僅 `isActive !== false`）
+- 旗標關閉時：
+  - 建立簽單頁載入機具改用 `listAllMachines()`（全部顯示）
+
+### 離線相容
+- `offline_delivery_notes` 會完整保存 payload（包含 `machines[]`、`drivers[]`）
+- 回線自動同步流程不受影響；簽章後 PNG 亦會自動上傳到 Storage 並更新文件 URL
+
+### 驗收清單（對照需求圖）
+- [x] UI 新增兩個區塊（機具/司機，多選）
+- [x] 收集函式 `collectSelectedMachines()`/`collectSelectedDrivers()`
+- [x] Payload 加入 `machines[]`/`drivers[]`；單一選擇自動寫回舊欄位；多選時舊欄位留空
+- [x] 機具列表過濾 `isActive=false`（旗標控制）
+- [x] 資料來源可切 Mock / Firestore（不改使用方式）
+- [x] 離線模式可暫存與回線同步
+- [x] 簽章頁可顯示多機具/多司機名稱（以「、」串接）
+- [x] `ENABLE_MULTI_MACHINE=false` 時，頁面仍可正常（隱藏新區塊、行為一致）
+- [x] Console 無未捕捉的錯誤（僅保留必要提示）
+
+---
+
+
+
+---
+
+
+## 🧩 使用 VS Code + Copilot 解決 Merge Conflict 指南
+
+在團隊開發中，如果 main 分支已更新，而你在自己的分支也有修改，  
+當你進行 `git pull`、`git merge` 或 `git rebase` 時，可能會出現 **merge conflict（合併衝突）**。
+
+以下是標準解法與建議流程 👇
+
+---
+
+### ⚙️ 一、更新並切回自己的分支
+```bash
+# 1️⃣ 更新 main 分支
+git checkout main
+git pull origin main
+
+# 2️⃣ 回到自己的分支
+git checkout feature/your-branch-name
+
+# 3️⃣ 把最新 main 合併進來
+git rebase main        #（推薦，歷史乾淨）
+# 或者：
+git merge main         #（操作簡單）
+````
+
+---
+
+### 💥 二、發生 Conflict 時會看到
+
+在 VS Code 裡會自動顯示類似：
+
+```text
+<<<<<<< HEAD
+// 你目前分支的內容
+=======
+// main 分支的內容
+>>>>>>> main
+```
+
+同時上方會出現工具列按鈕：
+
+* `Accept Current Change`（保留你自己的）
+* `Accept Incoming Change`（保留 main 的）
+* `Accept Both Changes`（保留兩邊）
+* `Compare Changes`（對比查看）
+
+---
+
+### 🤖 三、使用 Copilot 協助整合
+
+> **需要安裝 VS Code Insiders + GitHub Copilot Chat 插件**
+
+1️⃣ 開啟衝突檔案
+2️⃣ 打開 Copilot Chat 視窗（快捷鍵：`Ctrl + I` 或 `Ctrl + /`）
+3️⃣ 輸入提示（中英文都可以）：
+
+```
+Explain this merge conflict and suggest a merged version that keeps both changes.
+```
+
+或
+
+```
+幫我整合這段衝突，保留新 main 的修改但不要刪掉我原本的功能。
+```
+
+4️⃣ Copilot 會生成建議合併結果，你可以：
+
+* 點 **Apply Suggestion** 套用
+* 或手動複製貼上覆蓋衝突區塊
+
+---
+
+### 🧪 四、確認與繼續
+
+修完衝突後執行：
+
+```bash
+git add .
+git rebase --continue    # 若你是 rebase
+# 或
+git commit               # 若你是 merge
+```
+
+最後重新測試：
+
+```bash
+npm run dev
+```
+
+確定功能正常後推回遠端：
+
+```bash
+git push origin feature/your-branch-name --force
+```
+
+---
+
+### 💡 五、Tips
+
+| 狀況           | 建議                           |
+| ------------ | ---------------------------- |
+| 衝突只是註解或空格    | 直接用「Accept Both Changes」     |
+| 同一函式邏輯不同     | 用 Copilot 幫你合併後，再自己檢查邏輯      |
+| rebase 太亂、搞錯 | 可用 `git rebase --abort` 回復原狀 |
+| 不想改歷史        | 改用 `git merge main` 即可       |
+
+---
+
+### ✅ 總結
+
+> 每次 main 更新後，記得先拉最新版本、rebase 一次、
+> 用 Copilot 幫忙整合衝突，
+> 測試沒問題再 push，這樣團隊協作會最順。
+
+---
+
+我會給你一份可直接複製給隊友的「How to use（怎麼使用）」指南（Markdown），包含一步步命令、驗證與常見故障排除，讓隊友能在本機 Emulator 上啟動並執行 seeder 建立 Auth 與 Firestore `users`。下面先列出主要步驟，接著是完整可貼上的內容。
+
+主要步驟（簡短）
+- 啟動 Firebase Emulator（使用 repo 預設 project `electronic-approval-dev`）
+- 在新的 PowerShell 視窗設定環境變數並執行 admin seeder
+- 用 list-users.js 驗證 Auth 使用者
+- 在 Emulator UI 檢查 Auth 與 Firestore
+- 常見問題與解法
+
+--- 以下為可直接複製給隊友的 Markdown 指南 ---
+
+## 本機 Emulator 使用指南（給隊友）
+
+說明：這份指南示範如何在本機 Firebase Emulator 上使用 repo 預設 project（`electronic-approval-dev`），並執行 admin seeder 建立 Authentication 帳號與對應的 Firestore `users/{uid}` 文件。
+
+### 先備條件
+- 安裝 Firebase CLI（支援 emulators）
+- Node.js 可執行 `node`
+- 在專案根目錄（含 .firebaserc 與 firebase.json）
+
+參考檔案：
+- dev-seed-users.js（admin seeder：會 建立 Auth 帳號並寫入 Firestore users）
+- list-users.js（檢視 emulator Auth 使用者的 helper）
+- dev-seed.js（前端 seeder，可用於 browser console）
+
+---
+
+### 1) 啟動 Emulator（使用 repo 預設 project）
+在專案根目錄，執行（PowerShell）：
+```powershell
+firebase emulators:start 
+
+若 emulator 已在執行，請先在該 terminal 按 Ctrl+C 停止，再以上述指令重啟。
+
+---
+
+### 2) 在新的 PowerShell 視窗設定環境變數並執行 seeder
+在新的 PowerShell 視窗設定 env 並執行 seeder（`--force` 可覆寫既有角色）：
+```powershell
+$env:FIRESTORE_EMULATOR_HOST="localhost:8080"
+$env:FIREBASE_AUTH_EMULATOR_HOST="localhost:9099"
+$env:GCLOUD_PROJECT="electronic-approval-dev"
+npm install firebase-admin
+node .\prototype\js\tools\dev-seed-users.js --force
+```
+檢查 seeder 輸出，確認有列出 `[Env] GCLOUD_PROJECT: electronic-approval-dev` 與每位使用者的建立/略過訊息。
+
+---
+
+### 3) 驗證 Auth 使用者（CLI）
+Seeder 完成後，使用同一個環境執行：
+```powershell
+node .\list-users.js
+```
+輸出會列出 emulator 裡的 Auth 使用者（uid、email、customClaims 等）。若有結果代表 seeder 成功建立帳號。
+
+---
+
+### 4) 在 Emulator UI 檢查
+打開並刷新 Emulator UI：
+- URL: http://127.0.0.1:4000
+
+檢查項目：
+- Auth -> 使用者清單：應看到 seeder 建立的帳號
+- Firestore -> users collection：檢查 `users/{uid}` 是否存在，並包含 `role`, `email`, `displayName` 等欄位
+
+若 UI 沒顯示但 list-users.js 有內容，請在瀏覽器做硬性重新整理（Ctrl+F5）。
+
+---
+
+### 常見故障與解法
+- UI 顯示的 project 名稱不是 `electronic-approval-dev`：
+  - 停止 emulator 並以 `-P electronic-approval-dev` 重新啟動。
+- Seeder 日誌顯示不同的 `GCLOUD_PROJECT`：
+  - 檢查執行 seeder 的 PowerShell 是否有正確設定 `$env:GCLOUD_PROJECT="electronic-approval-dev"`。
+- list-users.js 沒列出使用者：
+  - 確認 `FIREBASE_AUTH_EMULATOR_HOST` 與 `FIRESTORE_EMULATOR_HOST` 指向 `localhost:9099` 與 `localhost:8080`。
+- 要覆寫已存在的角色或資料：
+  - 用 `--force` 參數重新執行 seeder，或手動在 seeder 中調整合併/覆寫邏輯。
+- 若想把 repo 預設 project alias 改成別名（例如 `iew`）：
+```powershell
+firebase use --add electronic-approval-dev
+# 互動式時輸入 alias，例如：iew
+```
+
+---
+
+### 一句話快速檢查表（給隊友）
+1. 啟動 emulator：`firebase emulators:start -P electronic-approval-dev --only auth,firestore`  
+2. 在新視窗設定 env 並執行 seeder：設定 three env（Auth/Firestore/GCLOUD_PROJECT）→ `node dev-seed-users.js --force`  
+3. 驗證：`node list-users.js` → 打開 http://127.0.0.1:4000 檢查 Auth / Firestore
+
+---
+
+
+
 
 
 

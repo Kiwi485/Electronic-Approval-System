@@ -4,6 +4,7 @@ import { buildValidatedPayload } from './form-validation.js';
 import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { offlineManager } from './offline.js';
 import { getApiSource } from './api/index.js';
+import { getUserContext } from './session-context.js';
 
 console.log('🚀 new-delivery.js 已載入');
 
@@ -47,13 +48,32 @@ form?.addEventListener('submit', async (e) => {
     return;
   }
   const baseData = v.data;
+  const { uid, role, user, profile } = await getUserContext();
+  const creatorUid = uid || null;
+  const creatorRole = role || null;
+  const creatorEmail = user?.email || profile?.email || null;
+  const creatorName = profile?.displayName || user?.displayName || null;
+  const driverIds = Array.isArray(baseData.drivers) ? baseData.drivers.map(d => d?.id).filter(Boolean) : [];
+  const assignedSet = new Set(driverIds);
+  if (creatorUid && creatorRole === 'driver') {
+    assignedSet.add(creatorUid);
+  }
+  const assignedTo = Array.from(assignedSet);
+  const readableBy = Array.from(new Set([...assignedSet, creatorUid].filter(Boolean)));
+
   const data = {
     localId: crypto.randomUUID(),
     ...baseData,
     signatureStatus: baseData.signatureStatus || 'pending',
     // 預設為未收款（供首頁「未收款」統計使用）
     paidAt: null,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    createdBy: creatorUid,
+    createdByRole: creatorRole,
+    createdByEmail: creatorEmail,
+    createdByName: creatorName,
+    assignedTo,
+    readableBy
   };
   submitBtn.disabled = true;
   const originalText = submitBtn.innerHTML;

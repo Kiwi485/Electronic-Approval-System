@@ -1,4 +1,46 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "deliveryNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "readableBy", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "serverCreatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "signatureStatus", "order": "ASCENDING" },
+        { "fieldPath": "readableBy", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "serverCreatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "readableBy", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "signedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "readableBy", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveryNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "paidAt", "order": "ASCENDING" },
+        { "fieldPath": "readableBy", "arrayConfig": "CONTAINS" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

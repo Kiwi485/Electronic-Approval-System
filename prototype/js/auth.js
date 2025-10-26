@@ -28,14 +28,23 @@ async function loginEmailPassword(email, password, remember = true) {
 
 async function logout() { await signOut(auth); }
 
-function requireAuth(redirectTo = 'login.html') {
+function getCurrentUser() { return currentUser; }
+
+function requireAuth(redirectTo = 'login.html', options = {}) {
   // 呼叫時立即先隱藏主體避免閃爍
   const root = document.documentElement;
   root.style.visibility = 'hidden';
-  waitAuthReady().then(user => {
+  waitAuthReady().then(async user => {
     if (!user) {
       location.replace(redirectTo + '?r=' + encodeURIComponent(location.pathname + location.search));
       return;
+    }
+    if (typeof options.afterAuth === 'function') {
+      try {
+        await options.afterAuth(user);
+      } catch (err) {
+        console.warn('[auth] afterAuth callback failed', err);
+      }
     }
     root.style.visibility = 'visible';
   });
@@ -52,4 +61,4 @@ function mapAuthError(code) {
   }
 }
 
-export { loginEmailPassword, logout, requireAuth, waitAuthReady, mapAuthError };
+export { loginEmailPassword, logout, requireAuth, waitAuthReady, mapAuthError, getCurrentUser };

@@ -42,15 +42,64 @@ async function initDriversUi() {
       ];
     }
 
-    const toName = (d) => d?.displayName || d?.name || '';
-    const names = drivers.map(toName).filter(Boolean);
+    const normalized = drivers
+      .map((driver) => {
+        const name = driver?.displayName || driver?.name || '';
+        const docId = driver?.id || driver?.docId || '';
+        const resolvedId = driver?.uid || driver?.userId || docId;
+        const email = driver?.email || driver?.primaryEmail || '';
+        if (!name) return null;
+        return {
+          id: resolvedId || null,
+          name,
+          displayName: name,
+          email: email || null,
+          docId: docId || null,
+          raw: driver
+        };
+      })
+      .filter(Boolean);
+
+    window.__EAS_DRIVER_CATALOG = normalized;
+
+    const names = normalized.map(d => d.name);
 
     if (isSelect) {
       const select = elem;
-      select.innerHTML = `<option value="">— 選擇司機 —</option>` + names.map(n => `<option value="${n}">${n}</option>`).join('');
+      select.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '— 選擇司機 —';
+      select.appendChild(placeholder);
+
+      normalized.forEach((driver) => {
+        const option = document.createElement('option');
+        option.value = driver.name;
+        option.textContent = driver.name;
+        option.dataset.name = driver.name;
+        if (driver.id) {
+          option.dataset.id = driver.id;
+          option.dataset.uid = driver.id;
+        }
+        if (driver.docId) option.dataset.docId = driver.docId;
+        if (driver.email) option.dataset.email = driver.email;
+        select.appendChild(option);
+      });
       console.info(`[UI] 司機 select 載入完成 (${useFilter ? 'active only' : 'all'})，共 ${names.length} 筆，來源=${wantMock? 'mock':'firestore'}`);
     } else {
-      datalistEl.innerHTML = names.map(n => `<option value="${n}"></option>`).join('');
+      datalistEl.innerHTML = '';
+      normalized.forEach((driver) => {
+        const option = document.createElement('option');
+        option.value = driver.name;
+        option.dataset.name = driver.name;
+        if (driver.id) {
+          option.dataset.id = driver.id;
+          option.dataset.uid = driver.id;
+        }
+        if (driver.docId) option.dataset.docId = driver.docId;
+        if (driver.email) option.dataset.email = driver.email;
+        datalistEl.appendChild(option);
+      });
       console.info(`[UI] 司機 datalist 載入完成 (${useFilter ? 'active only' : 'all'})，共 ${names.length} 筆，來源=${wantMock? 'mock':'firestore'}`);
     }
 

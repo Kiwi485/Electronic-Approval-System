@@ -3,6 +3,7 @@ import { db } from '../firebase-init.js';
 import {
 	collection, getDocs, query, where, orderBy, limit
 } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { getUserContext } from './session-context.js';
 
 console.info('[Dashboard] index-dashboard.js loaded');
 
@@ -45,21 +46,33 @@ const cardNumbers = Array.from(document.querySelectorAll('.card-dashboard .card-
 const todayTableBody = document.querySelector('.card.mb-4 tbody'); // 今日簽單列表（第一個列表卡）
 const recentList = document.querySelector('.list-group'); // 最近完成（唯一 list-group）
 
-async function fetchTodayDocs() {
-	const q = query(collection(db, 'deliveryNotes'), where('date', '==', todayStr()));
+async function fetchTodayDocs(ctx) {
+	const { uid, role } = ctx;
+	if (role !== 'manager' && !uid) return [];
+	const base = [collection(db, 'deliveryNotes'), where('date', '==', todayStr())];
+	const constraints = (role === 'manager') ? base : [...base, where('readableBy', 'array-contains', uid)];
+	const q = query(...constraints);
 	const snap = await getDocs(q);
 	return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-async function fetchPendingDocs() {
-	const q = query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'pending'));
+async function fetchPendingDocs(ctx) {
+	const { uid, role } = ctx;
+	if (role !== 'manager' && !uid) return [];
+	const base = [collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'pending')];
+	const constraints = (role === 'manager') ? base : [...base, where('readableBy', 'array-contains', uid)];
+	const q = query(...constraints);
 	const snap = await getDocs(q);
 	return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-async function fetchCompletedDocsForWeek() {
+async function fetchCompletedDocsForWeek(ctx) {
 	// 避免複合索引，先用 signatureStatus = completed 取回，再以 client 過濾本週範圍
-	const q = query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'completed'));
+	const { uid, role } = ctx;
+	if (role !== 'manager' && !uid) return [];
+	const base = [collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'completed')];
+	const constraints = (role === 'manager') ? base : [...base, where('readableBy', 'array-contains', uid)];
+	const q = query(...constraints);
 	const snap = await getDocs(q);
 	const { startStr, endStr } = getWeekRange();
 	const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -69,17 +82,36 @@ async function fetchCompletedDocsForWeek() {
 	});
 }
 
-async function fetchUnpaidDocs() {
+async function fetchUnpaidDocs(ctx) {
 	// 需要新單據預設 paidAt: null（已由 new-delivery.js 保障）
-	const q = query(collection(db, 'deliveryNotes'), where('paidAt', '==', null));
+	const { uid, role } = ctx;
+	if (role !== 'manager' && !uid) return [];
+	const base = [collection(db, 'deliveryNotes'), where('paidAt', '==', null)];
+	const constraints = (role === 'manager') ? base : [...base, where('readableBy', 'array-contains', uid)];
+	const q = query(...constraints);
 	const snap = await getDocs(q);
 	return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-async function fetchRecentCompleted(limitN = 5) {
+async function fetchRecentCompleted(ctx, limitN = 5) {
 	// 以 signedAt 排序（簽章完成時間），再於 client 過濾 completed；抓 20 筆後裁切
-	const q = query(collection(db, 'deliveryNotes'), orderBy('signedAt', 'desc'), limit(20));
-	const snap = await getDocs(q);
+	const { uid, role } = ctx;
+	if (role !== 'manager' && !uid) return [];
+	let snap;
+	try {
+		const base = [collection(db, 'deliveryNotes')];
+		const constraints = (role === 'manager')
+			? [...base, orderBy('signedAt', 'desc'), limit(20)]
+			: [...base, where('readableBy', 'array-contains', uid), orderBy('signedAt', 'desc'), limit(20)];
+		const q = query(...constraints);
+		snap = await getDocs(q);
+	} catch (err) {
+		// 無索引時退而求其次
+		const fallback = (role === 'manager')
+			? query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'completed'), limit(20))
+			: query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'completed'), where('readableBy', 'array-contains', uid), limit(20));
+		snap = await getDocs(fallback);
+	}
 	const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 		.filter(x => (x.signatureStatus || 'pending') === 'completed')
 		.slice(0, limitN);
@@ -143,12 +175,13 @@ function renderRecentCompleted(rows) {
 
 async function refresh() {
 	try {
+		const context = await getUserContext();
 		const [todayRows, pendingRows, weekCompletedRows, unpaidRows, recentRows] = await Promise.all([
-			fetchTodayDocs(),
-			fetchPendingDocs(),
-			fetchCompletedDocsForWeek(),
-			fetchUnpaidDocs(),
-			fetchRecentCompleted(5)
+			fetchTodayDocs(context),
+			fetchPendingDocs(context),
+			fetchCompletedDocsForWeek(context),
+			fetchUnpaidDocs(context),
+			fetchRecentCompleted(context, 5)
 		]);
 
 		// 卡片數字

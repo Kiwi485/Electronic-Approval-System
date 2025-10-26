@@ -107,3 +107,7 @@
         height: 150px;
     }
 }
+
+html[data-user-role="driver"] .role-manager-only {
+    display: none !important;
+}

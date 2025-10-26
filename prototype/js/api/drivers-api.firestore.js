@@ -27,6 +27,7 @@ const toDriverModel = (snapshot) => {
   const data = snapshot.data() || {};
   return {
     id: snapshot.id,
+    uid: data.uid || snapshot.id,
     displayName: data.displayName || data.name || '',
     role: data.role || 'driver',
     isActive: data.isActive !== false,
@@ -42,6 +43,7 @@ const toManagerModel = (snapshot) => {
   const data = snapshot.data() || {};
   return {
     id: snapshot.id,
+    uid: data.uid || snapshot.id,
     displayName: data.displayName || data.name || '',
     role: data.role || 'manager',
     isActive: data.isActive !== false,
@@ -97,6 +99,10 @@ export async function createDriver(input) {
     payload.email = input.email ?? null;
     payload.phone = input.phone ?? null;
     payload.licenseNo = input.licenseNo ?? null;
+    if (input.uid !== undefined) {
+      const trimmedUid = String(input.uid || '').trim();
+      payload.uid = trimmedUid || null;
+    }
   } else {
     throw new Error('createDriver: invalid input');
   }
@@ -112,6 +118,7 @@ export async function createDriver(input) {
     email: payload.email ?? null,
     phone: payload.phone ?? null,
     licenseNo: payload.licenseNo ?? null,
+    uid: payload.uid ?? null,
     createdAt: now,
     updatedAt: now
   };
@@ -130,6 +137,10 @@ export async function updateDriver(id, patch) {
   if (patch?.email !== undefined) updates.email = patch.email ?? null;
   if (patch?.phone !== undefined) updates.phone = patch.phone ?? null;
   if (patch?.licenseNo !== undefined) updates.licenseNo = patch.licenseNo ?? null;
+  if (patch?.uid !== undefined) {
+    const trimmedUid = String(patch.uid || '').trim();
+    updates.uid = trimmedUid || null;
+  }
 
   // 如果只有 updatedAt（沒有其他欄位），仍會寫入 updatedAt（視情境可視為允許）
   // 若想嚴格檢查可在此 throw

@@ -21,8 +21,8 @@
                         <span class="d-none d-md-inline" id="currentUserEmail">—</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
-                        <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+                        <li class="role-manager-only"><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
                     </ul>
@@ -145,6 +145,30 @@
                                 <textarea class="form-control" rows="2" name="remark" id="remark" placeholder="其他說明..."></textarea>
                             </div>
 
+                            <!-- 多機具/多司機（受旗標控制，預設隱藏；不影響既有欄位） -->
+                            <div class="col-12 d-none" id="multiMachineSection">
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-gear-wide-connected me-1"></i>選擇機具（可多選）</span>
+                                    <span class="text-muted small">僅選 1 項時會同步填入「機具」欄位</span>
+                                </label>
+                                <div class="border rounded p-2" style="max-height:200px;overflow:auto;">
+                                    <div class="text-muted small" id="machinesLoading">載入中...</div>
+                                    <div class="row g-2" id="machinesOptions"></div>
+                                </div>
+                                <div class="form-text">清單來源可切換 Mock/Firestore；可由旗標控制是否過濾停用機具</div>
+                            </div>
+
+                            <div class="col-12 d-none" id="multiDriverSection">
+                                <label class="form-label d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-people me-1"></i>選擇司機（可多選）</span>
+                                    <span class="text-muted small">僅選 1 位時會同步填入「司機姓名」欄位</span>
+                                </label>
+                                <div class="border rounded p-2" style="max-height:200px;overflow:auto;">
+                                    <div class="text-muted small" id="driversLoading">載入中...</div>
+                                    <div class="row g-2" id="driversOptions"></div>
+                                </div>
+                            </div>
+
                             <!-- 全域錯誤訊息 -->
                             <div class="col-12">
                                 <div id="formGlobalError" class="alert alert-danger py-2 px-3 d-none small"></div>
@@ -168,20 +192,98 @@
         </div>
     </div>
 
-        <!-- 旗標需最先載入以便 API 動態選擇資料來源（動態引入以避免快取） -->
-        <script type="module">
-            import(`./js/config-flags.js?v=${Date.now()}`);
+        <script type="module" src="js/config-flags.js?v=20251025"></script>
+        <script type="module" src="js/machines-ui.js?v=20251024b"></script>
+        <script type="module" src="js/drivers-ui.js?v=20251023"></script>
+        <script type="module" src="js/offline.js?v=20251023"></script>
+        <script type="module" src="js/new-delivery.js?v=20251025"></script>
+        <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
+        <script type="module" src="js/auth-guard.js"></script>
+            <script type="module">
+                import { listActiveMachines, listAllMachines, listActiveDrivers } from './js/api/index.js';
+
+            async function waitForFlags(timeout = 1200) {
+                const start = Date.now();
+                while (typeof window.APP_FLAGS === 'undefined' && (Date.now() - start) < timeout) {
+                    await new Promise(resolve => setTimeout(resolve, 40));
+                }
+                return window.APP_FLAGS || {};
+            }
+
+            async function renderOptions() {
+                const flags = await waitForFlags();
+                const enableMultiMachine = !!flags.ENABLE_MULTI_MACHINE;
+                const enableMultiDriver = !!flags.ENABLE_MULTI_DRIVER;
+
+                const machineSection = document.getElementById('multiMachineSection');
+                const driverSection = document.getElementById('multiDriverSection');
+                if (enableMultiMachine) machineSection?.classList.remove('d-none');
+                if (enableMultiDriver) driverSection?.classList.remove('d-none');
+                console.info('[MultiSelect] flags=', flags);
+
+                if (enableMultiMachine) {
+                    const wrap = document.getElementById('machinesOptions');
+                    const loading = document.getElementById('machinesLoading');
+                    if (wrap) {
+                        loading?.classList.remove('d-none');
+                        try {
+                            const useActive = flags.ENABLE_MACHINE_DEACTIVATE_FILTER !== false;
+                            const items = useActive ? await listActiveMachines() : await listAllMachines();
+                            wrap.innerHTML = '';
+                            items.forEach((m) => {
+                                const col = document.createElement('div');
+                                col.className = 'col-12 col-md-6';
+                                col.innerHTML = `
+                                    <label class="form-check small">
+                                        <input type="checkbox" class="form-check-input" data-id="${m.id}" data-name="${m.name}">
+                                        <span class="form-check-label">${m.name}</span>
+                                    </label>`;
+                                wrap.appendChild(col);
+                            });
+                        } catch (error) {
+                            wrap.innerHTML = `<div class="text-danger small">載入機具失敗：${error.message || error}</div>`;
+                        } finally {
+                            loading?.classList.add('d-none');
+                        }
+                    }
+                }
+
+                        if (enableMultiDriver) {
+                    const wrap = document.getElementById('driversOptions');
+                    const loading = document.getElementById('driversLoading');
+                    if (wrap) {
+                        loading?.classList.remove('d-none');
+                        try {
+                                    const items = await listActiveDrivers();
+                            wrap.innerHTML = '';
+                            items.forEach((d) => {
+                                const displayName = d.displayName || d.name || '';
+                                const col = document.createElement('div');
+                                const docIdAttr = d.docId ? ` data-doc-id="${d.docId}"` : '';
+                                col.className = 'col-12 col-md-6';
+                                col.innerHTML = `
+                                    <label class="form-check small">
+                                        <input type="checkbox" class="form-check-input" data-id="${d.id}" data-uid="${d.id}" data-name="${displayName}" data-display="${displayName}"${docIdAttr}>
+                                        <span class="form-check-label">${displayName}</span>
+                                    </label>`;
+                                wrap.appendChild(col);
+                            });
+                        } catch (error) {
+                            wrap.innerHTML = `<div class="text-danger small">載入司機失敗：${error.message || error}</div>`;
+                        } finally {
+                            loading?.classList.add('d-none');
+                        }
+                    }
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    renderOptions().catch(err => console.warn('[MultiSelect] render error', err));
+                });
+            } else {
+                renderOptions().catch(err => console.warn('[MultiSelect] render error', err));
+            }
         </script>
-        
-    <!-- 新增：機具選單 UI（更新版本，鏡像司機邏輯） -->
-    <script type="module" src="js/machines-ui.js?v=20251024b"></script>
-    <!-- 新增：司機選單 UI（支援 mock/Firestore 與閃斷線 fallback） -->
-    <script type="module" src="js/drivers-ui.js?v=20251023"></script>
-    <!-- 離線管理與新增簽單腳本（加版本避免快取舊 JS） -->
-    <script type="module" src="js/offline.js?v=20251023"></script>
-    <script type="module" src="js/new-delivery.js?v=20251023"></script>
-    <script type="module" src="js/form-validation.js"></script> <!-- 新增驗證與工時計算 -->
-    <script type="module" src="js/auth-guard.js"></script>
-    <script type="module" src="js/tools/seed-drivers.js"></script>
 </body>
 </html>

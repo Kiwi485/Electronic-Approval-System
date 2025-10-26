@@ -204,11 +204,92 @@ function wireEvents() {
     // 不在此處綁定 submit，改由 new-delivery.js 主導提交流程
 }
 
+// 旗標與輔助 --------------------------------------------------------------
+function isFlagOn(name, def=false){ try { return window.APP_FLAGS?.[name] ?? def; } catch { return def; } }
+
+function getDriverCatalog(){
+    const catalog = window.__EAS_DRIVER_CATALOG;
+    if (Array.isArray(catalog)) return catalog;
+    if (catalog && typeof catalog[Symbol.iterator] === 'function') {
+        try { return Array.from(catalog); } catch { return []; }
+    }
+    return [];
+}
+
+function resolveDriverFromField(){
+    if (!form) return null;
+    const field = form.driverName;
+    if (!field) return null;
+
+    const tag = (field.tagName || '').toLowerCase();
+    let rawValue = (field.value || '').trim();
+    let optionId = '';
+    let optionLabel = rawValue;
+
+    if (tag === 'select') {
+        const opt = field.options?.[field.selectedIndex >= 0 ? field.selectedIndex : 0];
+        if (opt) {
+            optionId = opt.dataset?.uid || opt.dataset?.id || '';
+            optionLabel = opt.dataset?.name || opt.text || opt.value || optionLabel;
+            if (!rawValue) rawValue = (opt.value || '').trim();
+        }
+    } else if (field.list) {
+        try {
+            const candidates = Array.from(field.list?.options || []);
+            const matched = candidates.find(o => (o.value || '').trim() === rawValue);
+            if (matched) {
+                optionId = matched.dataset?.uid || matched.dataset?.id || '';
+                optionLabel = matched.dataset?.name || matched.value || optionLabel;
+            }
+        } catch {/* ignore */}
+    }
+
+    const catalog = getDriverCatalog();
+    if (optionId) {
+        const matchById = catalog.find(d => d.id === optionId);
+        const name = optionLabel || matchById?.name || matchById?.displayName || rawValue;
+        return { id: optionId, name: name || '' };
+    }
+
+    if (!rawValue) return null;
+    const lower = rawValue.toLowerCase();
+    const matchByValue = catalog.find(d => {
+        const name = (d.name || '').toLowerCase();
+        const display = (d.displayName || '').toLowerCase();
+        const email = (d.email || '').toLowerCase();
+        return name === lower || display === lower || (email && email === lower);
+    });
+    if (matchByValue && matchByValue.id) {
+        return { id: matchByValue.id, name: matchByValue.name || matchByValue.displayName || rawValue };
+    }
+
+    return rawValue ? { id: null, name: rawValue } : null;
+}
+
+function collectSelectedMachines(){
+    if (!isFlagOn('ENABLE_MULTI_MACHINE', false)) return [];
+    const box = document.getElementById('machinesOptions');
+    if (!box) return [];
+    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
+    return checked.map(el => ({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') || '' }));
+}
+
+function collectSelectedDrivers(){
+    if (!isFlagOn('ENABLE_MULTI_DRIVER', false)) return [];
+    const box = document.getElementById('driversOptions');
+    if (!box) return [];
+    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
+    return checked.map(el => ({
+        id: el.getAttribute('data-uid') || el.getAttribute('data-id'),
+        name: el.getAttribute('data-name') || el.getAttribute('data-display') || ''
+    }));
+}
+
 // 導出（若其他模組需要）
 function buildValidatedPayload() {
     clearGlobalError();
     if (!runFullValidation()) return { ok: false, error: 'VALIDATION_FAILED' };
-    const data = {
+        const data = {
         customer: form.customer.value.trim(),
         date: form.date.value,
         location: form.location.value.trim(),
@@ -231,7 +312,54 @@ function buildValidatedPayload() {
         signatureDataUrl: null,
         signatureStatus: 'pending'
     };
+
+        // 多選欄位（純加欄位，不影響原欄位用法）
+        const enableMultiMachine = isFlagOn('ENABLE_MULTI_MACHINE', false);
+        const enableMultiDriver = isFlagOn('ENABLE_MULTI_DRIVER', false);
+
+        const machines = collectSelectedMachines();
+        if (machines.length > 0) {
+            data.machines = machines;
+        } else if (enableMultiMachine) {
+            data.machines = [];
+        }
+
+        if (machines.length === 1 && (!data.machine || data.machine.trim() === '')) {
+            data.machine = machines[0].name || '';
+        } else if (machines.length > 1) {
+            data.machine = '';
+        }
+
+        const driverEntries = [];
+        const seenDriverKeys = new Set();
+        const pushDriverEntry = (entry) => {
+            if (!entry) return;
+            const id = entry.id ? String(entry.id) : '';
+            const name = (entry.name || '').trim();
+            if (!id && !name) return;
+            const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+            if (seenDriverKeys.has(key)) return;
+            seenDriverKeys.add(key);
+            driverEntries.push({ id: id || null, name });
+        };
+
+        collectSelectedDrivers().forEach(pushDriverEntry);
+        const singleDriver = resolveDriverFromField();
+        if (singleDriver) pushDriverEntry(singleDriver);
+
+        if (enableMultiDriver || driverEntries.length > 0) {
+            data.drivers = driverEntries;
+        }
+
+        const rawDriverField = data.driverName?.trim() || '';
+        if (driverEntries.length === 0) {
+            data.driverName = rawDriverField;
+        } else if (driverEntries.length === 1) {
+            data.driverName = driverEntries[0].name || rawDriverField;
+        } else {
+            data.driverName = '';
+        }
     return { ok: true, data };
 }
 
-export { calcTotalHours, buildValidatedPayload, getSignatureDataURL };
+export { calcTotalHours, buildValidatedPayload, getSignatureDataURL, collectSelectedMachines, collectSelectedDrivers };

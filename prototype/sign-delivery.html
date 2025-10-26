@@ -24,8 +24,8 @@
           <span class="d-none d-md-inline" id="currentUserEmail">—</span>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
-          <li><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
+          <li class="role-manager-only"><a class="dropdown-item" href="profile.html"><i class="bi bi-person me-2"></i>個人資料</a></li>
+          <li class="role-manager-only"><a class="dropdown-item" href="settings.html"><i class="bi bi-gear me-2"></i>設定</a></li>
           <li><hr class="dropdown-divider"/></li>
           <li><a class="dropdown-item text-danger" href="#" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>登出</a></li>
         </ul>
@@ -63,6 +63,7 @@
           <div class="col-lg-7">
             <div id="noteWrapper">
               <div class="alert alert-info small" id="selectHint">請在左側選擇一筆待簽章簽單。</div>
+              <div id="loadError" class="alert alert-danger small d-none mt-2"></div>
             </div>
           </div>
         </div>
@@ -113,8 +114,8 @@
       <a href="index.html" class="btn btn-link text-secondary"><i class="bi bi-house-door"></i><small class="d-block">首頁</small></a>
       <a href="new-delivery.html" class="btn btn-link text-secondary"><i class="bi bi-plus-circle"></i><small class="d-block">新增</small></a>
       <a href="history.html" class="btn btn-link text-secondary"><i class="bi bi-clock-history"></i><small class="d-block">歷史</small></a>
-      <a href="driver-admin.html" class="btn btn-link text-secondary"><i class="bi bi-people"></i><small class="d-block">司機</small></a>
-      <a href="machine-admin.html" class="btn btn-link text-secondary"><i class="bi bi-tools"></i><small class="d-block">機具</small></a>
+  <a href="driver-admin.html" class="btn btn-link text-secondary role-manager-only"><i class="bi bi-people"></i><small class="d-block">司機</small></a>
+  <a href="machine-admin.html" class="btn btn-link text-secondary role-manager-only"><i class="bi bi-tools"></i><small class="d-block">機具</small></a>
       <a href="sign-delivery.html" class="btn btn-link text-primary"><i class="bi bi-pencil-square"></i><small class="d-block">簽章</small></a>
     </div>
   </nav>
