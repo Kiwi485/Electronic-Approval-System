@@ -13,8 +13,8 @@ window.APP_FLAGS = {
 // 初始旗標（預設以 Firestore 為使用情境）
 const DEFAULT_FLAGS = {
   USE_MOCK_DATA: false,
-  ENABLE_MULTI_MACHINE: true,
-  ENABLE_MULTI_DRIVER: true,
+  ENABLE_MULTI_MACHINE: false,
+  ENABLE_MULTI_DRIVER: false,
   ENABLE_MACHINE_DEACTIVATE_FILTER: false,
   ENABLE_MIGRATION_TOOL: true
 };
