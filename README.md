@@ -1636,8 +1636,151 @@ firebase use --add electronic-approval-dev
 
 ---
 
+## 版本與環境需求 10/28更新日誌
 
+- Node.js：20.x（建議 20.17.0）
+- Firebase CLI：v14.x（與 Node 20 相容）
+- Functions 執行環境：package.json 內 `engines.node=20`
+- 套件
+  - 根目錄：已存在 `firebase-admin` 用於工具腳本
+  - functions：`firebase-functions@^4.9.0`、`firebase-admin@^12.7.0`
 
+## 同仁更新指南（Windows PowerShell）
 
+1) 拉最新程式碼
+```powershell
+cd "c:\path\to\your\workspace"
+git fetch
+git checkout test2
+git pull
+```
 
+2) 切換 Node 版本
 
+ ⚙️ 二、安裝與設定流程
+- 未安裝:
+1. 前往官方頁面：  
+   🔗 [https://github.com/coreybutler/nvm-windows/releases/latest](https://github.com/coreybutler/nvm-windows/releases/latest)
+2. 下載並執行 `nvm-setup.exe`
+   - NVM 安裝路徑：`C:\nvm`  
+   - Node.js symlink 路徑：`C:\Program Files\nodejs`
+3. 完成後關閉 PowerShell → 重新開啟 → 驗證：
+   ```bash
+   nvm version
+- 若已安裝 nvm-windows：
+```powershell
+nvm install 20.17.0
+nvm use 20.17.0
+node -v
+firebase --version
+```
+- 期望：node v20.x，firebase CLI v14.x
+
+3) 安裝相依套件
+- functions 目錄（雲端 函式）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統\functions"
+npm install
+```
+- 根目錄（工具腳本會用到）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統"
+npm install
+```
+
+4) 啟動 Firebase Emulators（Functions/Firestore/Auth/Storage）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統"
+firebase emulators:start --only functions,firestore,auth,storage
+```
+- 開啟 Emulator UI：http://localhost:4000
+- Functions 面板應看到：
+  - createDriverAccount
+  - updateDriverAccount
+  - deleteDriverAccount
+
+5) 啟動前端（避免快取）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統\prototype"
+npx http-server -p 3000 -c-1
+```
+- 登入頁：http://localhost:3000/login.html?emu=1
+- 管理頁：http://localhost:3000/driver-admin.html?emu=1
+- 新增簽單：http://localhost:3000/new-delivery.html?emu=1
+
+6) 匯入測試帳號（可選，若還沒有 manager）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統"
+$env:FIRESTORE_EMULATOR_HOST = "localhost:8080"
+$env:FIREBASE_AUTH_EMULATOR_HOST = "localhost:9099"
+$env:GCLOUD_PROJECT = "electronic-approval-dev"
+node .\prototype\js\tools\dev-seed-users.js --force
+```
+- 預設會建立 `manager@example.test / Test1234!` 並賦予 `role=manager`
+
+## 驗證場景（端到端）
+
+- 新增司機
+  - 以管理者登入 `login.html?emu=1`
+  - 到 `driver-admin.html?emu=1` 點「新增司機」
+  - 輸入姓名與 Email（Email 必填）
+  - 成功後會顯示「初始密碼」；Auth Emulator 出現新使用者；Firestore `users/{uid}` 有文件
+  - 用新司機在登入頁用初始密碼登入，應可進入
+
+- 停用司機
+  - 在管理頁切換 isActive=false
+  - Auth 使用者 Disabled=true；司機帳號再登入會顯示「此帳號已被停用」
+
+- 新增簽單頁司機下拉
+  - `new-delivery.html?emu=1` 只會列出 `isActive=true` 的司機可選
+
+## 常見錯誤與排查
+
+- HttpsCallable UNAVAILABLE / ECONNREFUSED
+  - Functions Emulator 沒啟動或 5001 連不到
+  - 解法：重啟 emulator；確認 firebase-init.js 已連 `localhost:5001`（網址加 `?emu=1`）
+
+- permission-denied / unauthenticated
+  - 你不是 manager 或未登入
+  - 解法：用 `manager@example.test / Test1234!`；若剛改 claims，請登出再登入
+
+- 新增司機顯示「儲存失敗」但 Auth 有建立
+  - 舊版本 UI 把「儲存」與「刷新清單」綁一起；現在已拆開
+  - 若仍發生：按 F12 看 Network 裡 `createDriverAccount` 的 Response，貼錯誤碼給我們
+
+- 無限轉圈或載入不到清單
+  - 請確保用 http 伺服器開啟 prototype（不要用 file://）
+  - 使用 `npx http-server -p 3000 -c-1` 並強制重整（Ctrl+F5）
+
+## 佈署到正式環境（可選）
+
+- 佈署 函式（Asia-East1）
+```powershell
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統\functions"
+npm install
+
+cd "c:\Users\kiwib\OneDrive\桌面\簽單系統"
+firebase deploy --only functions
+```
+- 前端切換到正式服務：網址改用 `?prod=1` 或直接移除 `?emu=1`（firebase-init.js 會自動分流）
+
+## 風險與相容性
+
+- Node 版本必須統一到 20.x；若有人留在 18 或 22，可能導致 emulator 啟不動或 callable 行為異常
+- 新增司機 Email 必填；若漏填，雲端 函式 會回 `invalid-argument`
+- 權限模型基於 `customClaims.role`；變更 claims 後需重新登入讓 Token 更新
+
+## 後續建議
+
+- 對齊 `firebase-admin` 到 ^13.x（functions 與根目錄同版），降低雙版本混用風險
+- 加上最小化自動化驗證腳本（用 `httpsCallable` 直接跑 create/update/delete 並斷言 Auth 與 Firestore 狀態一致）
+- 在 UI 對非 manager 身分完全隱藏操作列（目前是 disabled，可再優化）
+
+## 品質檢查
+
+- Build：PASS（本專案前端為靜態頁＋ V9 模組；functions 可在 emulator 啟動代表可執行）
+- Lint/Typecheck：未設定（N/A）
+- Tests：有 Firestore 規則測試腳本，可選執行
+```powershell
+npm run test:rules
+```
