@@ -1,20 +1,41 @@
 // drivers-api.firestore.js
 // Firestore 實作：users 集合（role=='driver'）為司機來源
+// 注意：為了避免瀏覽器快取導致 firebase-init.js 尚未提供 named export `functions`
+// 這裡採用彈性取得 Functions 的方式（優先使用 firebase-init.js 匯出的 functions，否則自行 getFunctions 並在本機時連 emulator）。
+import * as appInit from '../../firebase-init.js';
 import { db } from '../../firebase-init.js';
+import { getApp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-app.js';
+import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-functions.js';
 import {
-  addDoc,
   collection,
-  deleteDoc,
-  doc,
-  getDoc,
   getDocs,
   query,
-  serverTimestamp,
-  updateDoc,
   where
 } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 
 const usersCol = collection(db, 'users');
+
+// 準備 Functions 服務；優先採用 firebase-init.js 匯出的 functions，其次自行 getFunctions。
+let functionsSvc = appInit?.functions;
+try {
+  if (!functionsSvc) {
+    const app = getApp();
+    functionsSvc = getFunctions(app, 'asia-east1');
+    // 在本機環境自動連 Emulator（若 firebase-init 已連接過，第二次呼叫不會有副作用）
+    const host = location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      try { connectFunctionsEmulator(functionsSvc, 'localhost', 5001); } catch (e) { /* ignore */ }
+    }
+  }
+} catch (e) {
+  console.warn('[drivers-api] init functions failed, callable will not work:', e);
+}
+
+function callDriverFunction(name, payload) {
+  if (!functionsSvc) throw new Error('Cloud Functions not initialized');
+  const callable = httpsCallable(functionsSvc, name);
+  return callable(payload).then((res) => res?.data ?? null);
+}
 
 const timestampToIso = (value) => {
   if (!value) return null;
@@ -88,21 +109,15 @@ export async function listAllManagers() {
  * 預設 isActive = false（除非明確傳入 isActive === true）
  */
 export async function createDriver(input) {
-  const now = serverTimestamp();
-
   let payload = {};
   if (typeof input === 'string') {
     payload.displayName = input.trim();
   } else if (typeof input === 'object' && input !== null) {
     payload.displayName = (input.displayName || '').toString().trim();
-    payload.isActive = input.isActive === true;
+    payload.isActive = input.isActive !== false;
     payload.email = input.email ?? null;
     payload.phone = input.phone ?? null;
     payload.licenseNo = input.licenseNo ?? null;
-    if (input.uid !== undefined) {
-      const trimmedUid = String(input.uid || '').trim();
-      payload.uid = trimmedUid || null;
-    }
   } else {
     throw new Error('createDriver: invalid input');
   }
@@ -111,46 +126,21 @@ export async function createDriver(input) {
     throw new Error('Driver displayName is required');
   }
 
-  const docPayload = {
-    displayName: payload.displayName,
-    role: 'driver',
-    isActive: payload.isActive === true ? true : false,
-    email: payload.email ?? null,
-    phone: payload.phone ?? null,
-    licenseNo: payload.licenseNo ?? null,
-    uid: payload.uid ?? null,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  const ref = await addDoc(usersCol, docPayload);
-  const latest = await getDoc(ref);
-  return toDriverModel(latest);
+  const response = await callDriverFunction('createDriverAccount', payload);
+  if (!response?.driver) {
+    throw new Error('createDriverAccount response missing driver payload');
+  }
+  return response.driver;
 }
 
 export async function updateDriver(id, patch) {
-  const ref = doc(usersCol, id);
-  const updates = { updatedAt: serverTimestamp() };
-
-  if (patch?.displayName !== undefined) updates.displayName = patch.displayName?.toString().trim() ?? '';
-  if (patch?.isActive !== undefined) updates.isActive = !!patch.isActive;
-  if (patch?.email !== undefined) updates.email = patch.email ?? null;
-  if (patch?.phone !== undefined) updates.phone = patch.phone ?? null;
-  if (patch?.licenseNo !== undefined) updates.licenseNo = patch.licenseNo ?? null;
-  if (patch?.uid !== undefined) {
-    const trimmedUid = String(patch.uid || '').trim();
-    updates.uid = trimmedUid || null;
-  }
-
-  // 如果只有 updatedAt（沒有其他欄位），仍會寫入 updatedAt（視情境可視為允許）
-  // 若想嚴格檢查可在此 throw
-  await updateDoc(ref, updates);
-  const latest = await getDoc(ref);
-  return toDriverModel(latest);
+  if (!id) throw new Error('updateDriver: id is required');
+  const response = await callDriverFunction('updateDriverAccount', { id, ...patch });
+  return response?.driver ?? null;
 }
 
 export async function deleteDriver(id) {
-  const ref = doc(usersCol, id);
-  await deleteDoc(ref);
+  if (!id) throw new Error('deleteDriver: id is required');
+  await callDriverFunction('deleteDriverAccount', { id });
   return true;
 }
