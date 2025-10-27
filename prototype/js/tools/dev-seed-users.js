@@ -24,7 +24,7 @@ function loadSeedData() {
 		{ uid: 'u-manager', email: 'manager@example.test', displayName: '系統經理', role: 'manager', isActive: true, password: 'Test1234!' },
 		{ uid: 'u-wang', email: 'wang@example.test', displayName: '王小明', role: 'driver', isActive: true, password: 'Test1234!' },
 		{ uid: 'u-lee', email: 'lee@example.test', displayName: '李阿華', role: 'driver', isActive: true, password: 'Test1234!' },
-		{ uid: 'u-retire', email: 'retire@example.test', displayName: '退休師傅', role: 'driver', isActive: false, password: 'Test1234!' }
+		{ uid: 'u-retire', email: 'retire@example.test', displayName: '退休師傅', role: 'driver', isActive: true, password: 'Test1234!' }
 	];
 }
 
