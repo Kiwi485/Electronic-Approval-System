@@ -64,6 +64,12 @@
         border-top: 1px solid #dee2e6;
         z-index: 1000;
     }
+    body.has-mobile-nav {
+        padding-bottom: 250px;
+    }
+    body.has-mobile-nav main {
+        padding-bottom: 250px;
+    }
 }
 /* --- 表單：簽名與驗證樣式（合併自原本預計的 form.css） --- */
 .signature-wrapper {

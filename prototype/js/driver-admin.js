@@ -6,6 +6,9 @@ const addBtn = document.getElementById('addDriverBtn');
 const modalEl = document.getElementById('driverModal');
 const form = document.getElementById('driverForm');
 const modalTitle = document.getElementById('modalTitle');
+const totalCountEl = document.getElementById('totalCount');
+const activeCountEl = document.getElementById('activeCount');
+const inactiveCountEl = document.getElementById('inactiveCount');
 
 const nameInput = document.getElementById('driverName');
 const emailInput = document.getElementById('driverEmail');
@@ -18,6 +21,23 @@ const savingSpinner = document.getElementById('savingSpinner');
 const modal = new bootstrap.Modal(modalEl);
 let driversCache = [];
 let editingId = null;
+
+function resetStats() {
+  if (!totalCountEl) return;
+  totalCountEl.textContent = '-';
+  activeCountEl.textContent = '-';
+  inactiveCountEl.textContent = '-';
+}
+
+function updateStats(drivers) {
+  if (!totalCountEl) return;
+  const total = drivers.length;
+  const active = drivers.filter(driver => driver.isActive).length;
+  const inactive = total - active;
+  totalCountEl.textContent = total;
+  activeCountEl.textContent = active;
+  inactiveCountEl.textContent = inactive;
+}
 
 function showAlert(message, variant = 'danger', duration = 2600) {
   alertBox.textContent = message;
@@ -46,6 +66,7 @@ function renderStatusBadge(isActive) {
 }
 
 function renderTable(drivers) {
+  updateStats(drivers);
   if (!drivers.length) {
     tableBody.innerHTML = `
       <tr>
@@ -174,6 +195,7 @@ async function refreshTable() {
           載入司機資料失敗，請重新整理頁面或稍後再試。
         </td>
       </tr>`;
+    resetStats();
   }
 }
 

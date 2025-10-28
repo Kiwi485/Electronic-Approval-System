@@ -8,6 +8,7 @@ const crossDayEl = document.getElementById('crossDay');
 const totalHoursEl = document.getElementById('totalHours');
 const amountDisplayEl = document.getElementById('amount');
 const amountRawEl = document.getElementById('amountRaw');
+const quantityEl = document.getElementById('quantity');
 const submitBtn = document.getElementById('submitBtn');
 const globalErrorEl = document.getElementById('formGlobalError');
 // 簽名已移至獨立簽章頁，這裡不再處理 canvas
@@ -73,6 +74,10 @@ function validateField(el) {
         // 金額驗證
         const raw = amountRawEl.value;
         valid = raw !== '' && !isNaN(Number(raw));
+    } else if (el === quantityEl) {
+        const raw = el.value.trim();
+        const num = Number(raw);
+        valid = raw !== '' && !isNaN(num) && num >= 0;
     } else if (el.getAttribute('type') === 'time') {
         valid = isValidTime(val);
     } else {
@@ -122,6 +127,11 @@ function updateSubmitState() {
         if (!el.value) return false;
         if (el.type === 'time' && !isValidTime(el.value)) return false;
         if (el === amountDisplayEl && (amountRawEl.value === '' || isNaN(Number(amountRawEl.value)))) return false;
+        if (el === quantityEl) {
+            const raw = el.value.trim();
+            const num = Number(raw);
+            if (raw === '' || isNaN(num) || num < 0) return false;
+        }
         return true;
     });
     const timeOk = validateTimeRelationship();
@@ -203,163 +213,82 @@ function wireEvents() {
 
     // 不在此處綁定 submit，改由 new-delivery.js 主導提交流程
 }
+const MACHINE_PLACEHOLDER_REGEX = /選擇機具/;
 
-// 旗標與輔助 --------------------------------------------------------------
-function isFlagOn(name, def=false){ try { return window.APP_FLAGS?.[name] ?? def; } catch { return def; } }
-
-function getDriverCatalog(){
-    const catalog = window.__EAS_DRIVER_CATALOG;
-    if (Array.isArray(catalog)) return catalog;
-    if (catalog && typeof catalog[Symbol.iterator] === 'function') {
-        try { return Array.from(catalog); } catch { return []; }
+function sanitizeMachineSelection(id = '', name = '', model = '') {
+    let cleanId = typeof id === 'string' ? id.trim() : (id ? String(id).trim() : '');
+    let cleanName = typeof name === 'string' ? name.trim() : (name ? String(name).trim() : '');
+    let cleanModel = typeof model === 'string' ? model.trim() : (model ? String(model).trim() : '');
+    const isPlaceholder = !cleanId && cleanName && MACHINE_PLACEHOLDER_REGEX.test(cleanName);
+    if (!cleanName || isPlaceholder) {
+        cleanId = '';
+        cleanName = '';
     }
-    return [];
-}
-
-function resolveDriverFromField(){
-    if (!form) return null;
-    const field = form.driverName;
-    if (!field) return null;
-
-    const tag = (field.tagName || '').toLowerCase();
-    let rawValue = (field.value || '').trim();
-    let optionId = '';
-    let optionLabel = rawValue;
-
-    if (tag === 'select') {
-        const opt = field.options?.[field.selectedIndex >= 0 ? field.selectedIndex : 0];
-        if (opt) {
-            optionId = opt.dataset?.uid || opt.dataset?.id || '';
-            optionLabel = opt.dataset?.name || opt.text || opt.value || optionLabel;
-            if (!rawValue) rawValue = (opt.value || '').trim();
-        }
-    } else if (field.list) {
-        try {
-            const candidates = Array.from(field.list?.options || []);
-            const matched = candidates.find(o => (o.value || '').trim() === rawValue);
-            if (matched) {
-                optionId = matched.dataset?.uid || matched.dataset?.id || '';
-                optionLabel = matched.dataset?.name || matched.value || optionLabel;
-            }
-        } catch {/* ignore */}
+    if (!cleanModel || isPlaceholder) {
+        cleanModel = cleanName || '';
     }
-
-    const catalog = getDriverCatalog();
-    if (optionId) {
-        const matchById = catalog.find(d => d.id === optionId);
-        const name = optionLabel || matchById?.name || matchById?.displayName || rawValue;
-        return { id: optionId, name: name || '' };
-    }
-
-    if (!rawValue) return null;
-    const lower = rawValue.toLowerCase();
-    const matchByValue = catalog.find(d => {
-        const name = (d.name || '').toLowerCase();
-        const display = (d.displayName || '').toLowerCase();
-        const email = (d.email || '').toLowerCase();
-        return name === lower || display === lower || (email && email === lower);
-    });
-    if (matchByValue && matchByValue.id) {
-        return { id: matchByValue.id, name: matchByValue.name || matchByValue.displayName || rawValue };
-    }
-
-    return rawValue ? { id: null, name: rawValue } : null;
-}
-
-function collectSelectedMachines(){
-    if (!isFlagOn('ENABLE_MULTI_MACHINE', false)) return [];
-    const box = document.getElementById('machinesOptions');
-    if (!box) return [];
-    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
-    return checked.map(el => ({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') || '' }));
-}
-
-function collectSelectedDrivers(){
-    if (!isFlagOn('ENABLE_MULTI_DRIVER', false)) return [];
-    const box = document.getElementById('driversOptions');
-    if (!box) return [];
-    const checked = [...box.querySelectorAll('input[type="checkbox"][data-id]:checked')];
-    return checked.map(el => ({
-        id: el.getAttribute('data-uid') || el.getAttribute('data-id'),
-        name: el.getAttribute('data-name') || el.getAttribute('data-display') || ''
-    }));
+    return { id: cleanId, name: cleanName, model: cleanModel };
 }
 
 // 導出（若其他模組需要）
 function buildValidatedPayload() {
     clearGlobalError();
     if (!runFullValidation()) return { ok: false, error: 'VALIDATION_FAILED' };
-        const data = {
+    // Gather machine details: support <select> (with data attrs) and plain input/datalist
+    let machineId = '';
+    let machineName = '';
+    let modelName = '';
+    if (form.machine) {
+        const mEl = form.machine;
+        try {
+            if (mEl.tagName && mEl.tagName.toLowerCase() === 'select') {
+                const opt = mEl.options[mEl.selectedIndex];
+                machineId = opt && opt.value ? opt.value : '';
+                machineName = opt && opt.dataset && opt.dataset.name ? opt.dataset.name : (opt ? opt.text : '');
+                modelName = opt && opt.dataset && (opt.dataset.model || opt.dataset.modelname) ? (opt.dataset.model || opt.dataset.modelname) : machineName;
+            } else {
+                // input / datalist fallback — we only have the free-form text
+                machineName = mEl.value ? mEl.value.trim() : '';
+                modelName = machineName;
+                machineId = '';
+            }
+        } catch (err) {
+            // defensive fallback
+            machineName = (mEl.value || '').trim();
+            modelName = machineName;
+            machineId = '';
+        }
+    }
+
+    ({ id: machineId, name: machineName, model: modelName } = sanitizeMachineSelection(machineId, machineName, modelName));
+
+    const data = {
         customer: form.customer.value.trim(),
         date: form.date.value,
         location: form.location.value.trim(),
-
-        // 新增三個欄位（預設非必填）
         purpose: form.purpose ? form.purpose.value.trim() : '',
+        item: form.purpose ? form.purpose.value.trim() : '',
         origin: form.origin ? form.origin.value.trim() : '',
         destination: form.destination ? form.destination.value.trim() : '',
-
         work: form.work.value.trim(),
         startTime: startTimeEl.value,
         endTime: endTimeEl.value,
         crossDay: crossDayEl.checked,
         totalHours: totalHoursEl.value ? Number(totalHoursEl.value) : null,
         amount: Number(amountRawEl.value),
-        machine: form.machine ? form.machine.value.trim() : '',
+        quantity: quantityEl ? Number(quantityEl.value) : null,
+        // Backwards-compatible: keep `machine` as display name, but add explicit IDs/names for reports
+        machine: machineName,
+        machineId: machineId,
+        machineName: machineName,
+        modelName: modelName,
         vehicleNumber: form.vehicleNumber ? form.vehicleNumber.value.trim() : '',
         driverName: form.driverName ? form.driverName.value.trim() : '',
         remark: form.remark ? form.remark.value.trim() : '',
         signatureDataUrl: null,
         signatureStatus: 'pending'
     };
-
-        // 多選欄位（純加欄位，不影響原欄位用法）
-        const enableMultiMachine = isFlagOn('ENABLE_MULTI_MACHINE', false);
-        const enableMultiDriver = isFlagOn('ENABLE_MULTI_DRIVER', false);
-
-        const machines = collectSelectedMachines();
-        if (machines.length > 0) {
-            data.machines = machines;
-        } else if (enableMultiMachine) {
-            data.machines = [];
-        }
-
-        if (machines.length === 1 && (!data.machine || data.machine.trim() === '')) {
-            data.machine = machines[0].name || '';
-        } else if (machines.length > 1) {
-            data.machine = '';
-        }
-
-        const driverEntries = [];
-        const seenDriverKeys = new Set();
-        const pushDriverEntry = (entry) => {
-            if (!entry) return;
-            const id = entry.id ? String(entry.id) : '';
-            const name = (entry.name || '').trim();
-            if (!id && !name) return;
-            const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
-            if (seenDriverKeys.has(key)) return;
-            seenDriverKeys.add(key);
-            driverEntries.push({ id: id || null, name });
-        };
-
-        collectSelectedDrivers().forEach(pushDriverEntry);
-        const singleDriver = resolveDriverFromField();
-        if (singleDriver) pushDriverEntry(singleDriver);
-
-        if (enableMultiDriver || driverEntries.length > 0) {
-            data.drivers = driverEntries;
-        }
-
-        const rawDriverField = data.driverName?.trim() || '';
-        if (driverEntries.length === 0) {
-            data.driverName = rawDriverField;
-        } else if (driverEntries.length === 1) {
-            data.driverName = driverEntries[0].name || rawDriverField;
-        } else {
-            data.driverName = '';
-        }
     return { ok: true, data };
 }
 
-export { calcTotalHours, buildValidatedPayload, getSignatureDataURL, collectSelectedMachines, collectSelectedDrivers };
+export { calcTotalHours, buildValidatedPayload, getSignatureDataURL };

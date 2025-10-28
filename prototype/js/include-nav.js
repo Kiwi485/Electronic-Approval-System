@@ -9,11 +9,20 @@
     tmp.innerHTML = text;
     const sidebar = tmp.querySelector('.sidebar');
     const main = document.querySelector('main');
-    if(sidebar && main){
-      // avoid inserting if page already has a sidebar
+    const injectSidebar = document.body?.dataset?.noSidebar !== 'true';
+    if(sidebar && main && injectSidebar){
       if(!document.querySelector('.sidebar')){
         main.parentNode.insertBefore(sidebar, main);
       }
+    }
+
+    const mobileNavTemplate = tmp.querySelector('.mobile-nav');
+    if(mobileNavTemplate && !document.querySelector('.mobile-nav')){
+      const clone = mobileNavTemplate.cloneNode(true);
+      document.body.appendChild(clone);
+    }
+    if(document.querySelector('.mobile-nav')){
+      document.body.classList.add('has-mobile-nav');
     }
 
     // helper: set active link and reorder items to canonical order
@@ -23,7 +32,6 @@
         'index.html',
         'new-delivery.html',
         'history.html',
-        'customers.html',
         'reports.html',
         'driver-admin.html',
         'machine-admin.html',
@@ -62,7 +70,7 @@
           'index.html',
           'new-delivery.html',
           'history.html',
-          'profile.html',
+          'reports.html',
           'driver-admin.html',
           'machine-admin.html',
           'sign-delivery.html'
@@ -86,6 +94,8 @@
     // Run now and after a short delay in case other scripts modify nav
     applyNavFixes();
     setTimeout(applyNavFixes, 250);
+    document.dispatchEvent(new CustomEvent('nav-ready'));
+    setTimeout(() => document.dispatchEvent(new CustomEvent('nav-ready')), 10);
   }catch(e){
     console.warn('include-nav: failed to inject sidebar', e);
   }

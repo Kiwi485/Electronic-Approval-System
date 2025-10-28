@@ -1,9 +1,13 @@
 // sign-delivery.js - 單獨簽章頁面
 import { db } from '../firebase-init.js';
-import { doc, getDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
 import { storage } from '../firebase-init.js';
-import { listPendingDeliveries } from './api/index.js';
+import { offlineManager } from './offline.js';
+import { waitAuthReady } from './auth.js';
+import { getUserContext, onUserRoleReady } from './session-context.js';
+
+console.info('[SignDelivery] layout version 20251027c');
 
 // 供離線使用的 key（最小變更：直接讀寫 localStorage）
 const OFFLINE_NOTES_KEY = 'offline_delivery_notes';
@@ -30,11 +34,92 @@ const signatureImg = document.getElementById('signatureImg');
 const signedAtText = document.getElementById('signedAtText');
 const redoSignature = document.getElementById('redoSignature');
 const debugLogEl = document.getElementById('debugLog');
+const listSectionEl = document.getElementById('listSection');
+const receivedCashEl = document.getElementById('receivedCash');
+
+const PAID_BADGE_HTML = '<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>已收款</span>';
+const UNPAID_BADGE_HTML = '<span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>待收款</span>';
+const MACHINE_PLACEHOLDER_REGEX = /選擇機具/;
+
+let paidLocked = false;
+let paidLockedValue = false;
+
+function getPaidBadge(checked) {
+  return checked ? PAID_BADGE_HTML : UNPAID_BADGE_HTML;
+}
+
+function updatePaidStatusLabel() {
+  const statusText = document.getElementById('paidStatusText');
+  if (statusText && receivedCashEl) {
+    statusText.innerHTML = getPaidBadge(receivedCashEl.checked);
+  }
+}
+
+function applyPaidState(checked, locked = false) {
+  if (!receivedCashEl) return;
+  paidLocked = !!locked;
+  paidLockedValue = !!checked;
+  receivedCashEl.checked = paidLockedValue;
+  receivedCashEl.disabled = paidLocked;
+  receivedCashEl.classList.toggle('cursor-not-allowed', paidLocked);
+  updatePaidStatusLabel();
+}
+
+receivedCashEl?.addEventListener('change', () => {
+  if (!receivedCashEl) return;
+  if (paidLocked) {
+    receivedCashEl.checked = paidLockedValue;
+    return;
+  }
+  updatePaidStatusLabel();
+});
 
 let currentDocId = null;        // 線上文件 id
 let currentLocalId = null;      // 離線暫存 id
 let hasSignature = false;
 let ctx;
+let currentRole = null;
+let currentUid = null;
+let currentEmail = null;
+let userContextReady = false;
+let userContextPromise = null;
+
+onUserRoleReady(({ role, profile }) => {
+  if (role) currentRole = role;
+  const profileEmail = profile?.email || profile?.contactEmail || null;
+  if (profileEmail) currentEmail = profileEmail;
+});
+
+async function applyUserContext(ctx = {}) {
+  const profileEmail = ctx.profile?.email || ctx.profile?.contactEmail || null;
+  const user = ctx.user || await waitAuthReady().catch(() => null);
+  currentUid = ctx.uid || user?.uid || currentUid || null;
+  currentRole = ctx.role || currentRole || 'driver';
+  currentEmail = profileEmail || user?.email || currentEmail || null;
+  userContextReady = true;
+  logDebug('user context ready', { role: currentRole, uid: currentUid });
+  return { role: currentRole, uid: currentUid };
+}
+
+function waitForUserContext() {
+  if (userContextPromise) return userContextPromise;
+  userContextPromise = getUserContext()
+    .then((ctx) => applyUserContext(ctx))
+    .catch(async (error) => {
+      logDebug('getUserContext fallback', { message: error?.message });
+      return applyUserContext();
+    });
+  return userContextPromise;
+}
+
+function getTimestampValue(input) {
+  if (!input) return 0;
+  if (typeof input.toDate === 'function') {
+    try { return input.toDate().getTime(); } catch { return 0; }
+  }
+  const date = new Date(input);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
 
 function logDebug(msg, data) {
   const ts = new Date().toISOString().split('T')[1]?.replace('Z','') || '';
@@ -42,6 +127,99 @@ function logDebug(msg, data) {
     debugLogEl.textContent += `[#${ts}] ${msg}` + (data ? ` => ${JSON.stringify(data)}` : '') + "\n";
   }
   console.log('[SignDebug]', msg, data||'');
+}
+
+function formatQuantity(value) {
+  if (value === null || value === undefined) return '-';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num.toLocaleString('zh-TW', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+}
+
+function getMachineLabel(note = {}) {
+  const pick = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const text = pick(entry);
+        if (text) {
+          if (MACHINE_PLACEHOLDER_REGEX.test(text)) return '';
+          return text;
+        }
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      const name = value.modelName || value.displayName || value.name || value.label || value.title;
+      if (name) {
+        const text = String(name).trim();
+        if (MACHINE_PLACEHOLDER_REGEX.test(text)) return '';
+        return text;
+      }
+      return '';
+    }
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (MACHINE_PLACEHOLDER_REGEX.test(text)) return '';
+      return text;
+    }
+    const text = String(value).trim();
+    if (MACHINE_PLACEHOLDER_REGEX.test(text)) return '';
+    return text;
+  };
+  const candidates = [
+    note.machineName,
+    note.modelName,
+    note.machineModel,
+    note.machine,
+    note.machines,
+    note.machineId
+  ];
+  for (const candidate of candidates) {
+    const text = pick(candidate);
+    if (text) return text;
+  }
+  return '-';
+}
+
+function renderEmptyState(message = '目前沒有待簽章項目') {
+  try {
+    if (pendingListEl) pendingListEl.innerHTML = '';
+    if (noPendingEl) {
+      noPendingEl.textContent = message;
+      noPendingEl.classList.remove('d-none');
+    }
+    if (pendingLoadingEl) pendingLoadingEl.style.display = 'none';
+    if (pendingListEl) pendingListEl.style.display = 'block';
+    if (!listSectionEl) return;
+    // 移除或隱藏任何遺留的錯誤提示樣式
+    const dangerAlerts = listSectionEl.querySelectorAll('.alert-danger, .text-danger');
+    dangerAlerts.forEach(node => {
+      if (!node) return;
+      if (typeof node.classList?.remove === 'function') {
+        node.classList.remove('alert-danger', 'text-danger');
+        node.classList.add('text-muted');
+      }
+      if (!node.dataset.cleaned) {
+        node.textContent = message;
+        node.dataset.cleaned = 'true';
+      }
+    });
+    const nodesWithErrorText = listSectionEl.querySelectorAll('*');
+    nodesWithErrorText.forEach(node => {
+      if (!node || typeof node.textContent !== 'string') return;
+      if (node.textContent.includes('載入失敗')) {
+        if (node === pendingListEl || node.contains(pendingListEl)) return;
+        node.textContent = message;
+        if (typeof node.classList?.add === 'function') {
+          node.classList.remove('alert', 'alert-danger', 'text-danger');
+          node.classList.add('text-muted');
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[SignDebug] renderEmptyState suppress error', err);
+  }
 }
 
 function setStatusBadge(status) {
@@ -53,131 +231,141 @@ function setStatusBadge(status) {
   statusBadge.textContent = t;
 }
 
-const toIsoString = (value) => {
-  if (!value) return null;
-  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
-  if (value instanceof Date) return value.toISOString();
-  return value;
-};
-
-const normalizeNote = (raw) => {
-  if (!raw) return null;
-  const id = raw.id || raw.docId || raw.localId;
-  if (!id) return null;
-  const data = { ...raw, id };
-  data.serverCreatedAt = toIsoString(raw.serverCreatedAt);
-  data.createdAt = toIsoString(raw.createdAt);
-  data.signedAt = toIsoString(raw.signedAt);
-  return data;
-};
-
-const sortByNewest = (a, b) => {
-  const getTime = (item) => new Date(item?.serverCreatedAt || item?.createdAt || 0).getTime();
-  return getTime(b) - getTime(a);
-};
-
-async function loadPendingList() {
-  logDebug('loadPendingList start');
-  if (!pendingListEl) return;
-  pendingListEl.innerHTML = '';
-  pendingListEl.style.display = 'none';
-  pendingLoadingEl?.classList.remove('d-none');
-  if (pendingLoadingEl) pendingLoadingEl.style.display = 'block';
-  noPendingEl?.classList.add('d-none');
-
-  let items = [];
-  let errorMessage = null;
-
-  try {
-    const remote = await listPendingDeliveries(120);
-    const dedup = new Map();
-    (Array.isArray(remote) ? remote : []).forEach((entry) => {
-      const normalized = normalizeNote(entry);
-      if (!normalized) return;
-      dedup.set(normalized.id, normalized);
-    });
-    items = Array.from(dedup.values());
-  } catch (err) {
-    errorMessage = err?.message || err?.code || String(err);
-    logDebug('loadPendingList remote failed', { message: errorMessage });
-  }
-
-  if (items.length > 0) {
-    items.sort(sortByNewest);
-    items.forEach((item) => {
-      const li = document.createElement('li');
-      li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-      const dateText = (item.date || item.createdAt || '').toString().split('T')[0];
-      const amountText = item.amount ? `NT$ ${item.amount}` : '-';
-      const hoursText = (item.totalHours ?? '-') + 'h';
-      li.innerHTML = `<div>
-          <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
-          <div class="text-muted small">日期: ${dateText || '-'} · 金額: ${amountText} · 工時: ${hoursText}</div>
-        </div>
-        <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
-      li.addEventListener('click', (event) => {
-        const targetId = event.target.closest('button')?.getAttribute('data-id') || item.id;
-        selectPending(targetId);
-      });
-      pendingListEl.appendChild(li);
-    });
-  }
-
-  if (errorMessage) {
-    const li = document.createElement('li');
-    li.className = 'list-group-item text-danger';
-    li.textContent = `遠端載入失敗：${errorMessage}`;
-    pendingListEl.appendChild(li);
-  }
-
-  if (pendingListEl.children.length === 0) {
-    noPendingEl?.classList.remove('d-none');
-  }
-
-  if (pendingLoadingEl) {
-    pendingLoadingEl.style.display = 'none';
-    pendingLoadingEl.classList.add('d-none');
-  }
-  pendingListEl.style.display = 'block';
-
-  try {
-    injectLatestOffline();
-  } catch (err) {
-    logDebug('injectLatestOffline failed', { message: err?.message || err });
-  }
-
-  logDebug('loadPendingList done', { remoteCount: items.length, hasError: Boolean(errorMessage) });
-}
-
 async function loadNote(id) {
   if (!id) return;
   logDebug('loadNote start', { id });
-  currentLocalId = null;
-  currentDocId = null;
-  noteSection?.classList.add('d-none');
   if (loadError) loadError.classList.add('d-none');
-
+  currentDocId = null;
+  noteSection.classList.add('d-none');
   try {
     const ref = doc(db, 'deliveryNotes', id);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      logDebug('loadNote missing', { id });
+      logDebug('note not found', { id });
       if (loadError) {
-        loadError.textContent = '找不到這筆簽單，請重新整理列表。';
+        loadError.textContent = '找不到此簽單';
         loadError.classList.remove('d-none');
       }
       return;
     }
-    const note = normalizeNote({ id, ...snap.data() });
-    currentDocId = id;
-    renderNote(note);
-    logDebug('loadNote success', { id });
-  } catch (err) {
-    logDebug('loadNote failed', { message: err?.message || err, code: err?.code });
+    const data = snap.data();
+    currentDocId = snap.id;
+    logDebug('note loaded', { id: snap.id });
+    renderNote(data);
+  } catch (e) {
+    console.error(e);
+    logDebug('loadNote error', { message: e.message, code: e.code });
     if (loadError) {
-      loadError.textContent = `載入簽單失敗：${err?.message || err}`;
+      loadError.textContent = '載入失敗：' + e.message;
       loadError.classList.remove('d-none');
     }
+  }
+}
+
+async function loadPendingList() {
+  if (!userContextReady) {
+    logDebug('loadPendingList skipped: user context pending');
+    await waitForUserContext();
+  }
+  logDebug('loadPendingList start');
+  pendingListEl.style.display = 'none';
+  pendingLoadingEl.style.display = 'block';
+  noPendingEl.classList.add('d-none');
+  pendingListEl.innerHTML = '';
+
+  // 先把離線待簽項目插到清單頂端（黃色），確保離線也能立刻看到
+  try { injectLatestOffline(); } catch (e) { logDebug('injectLatestOffline on load failed', { message: e.message }); }
+  let timeoutHit = false;
+  const to = setTimeout(() => {
+    timeoutHit = true;
+    logDebug('pendingList timeout fallback triggered (5s)');
+    pendingLoadingEl.innerHTML = '<span class="text-warning small">載入逾時，嘗試較簡單查詢...</span>';
+  }, 5000);
+  try {
+    // 為了徹底避免因規則造成的全域 list 拒絕，簽章頁一律以「司機可見」範圍載入待簽清單
+    if (!currentUid) {
+      logDebug('driver uid missing, pending list abort');
+      pendingListEl.innerHTML = `<li class="list-group-item text-danger">無法取得使用者資訊，請重新登入。</li>`;
+      pendingLoadingEl.style.display = 'none';
+      pendingListEl.style.display = 'block';
+      return;
+    }
+
+    const assignedQuery = query(collection(db, 'deliveryNotes'), where('assignedTo', 'array-contains', currentUid));
+    const createdQuery = query(collection(db, 'deliveryNotes'), where('createdBy', '==', currentUid));
+    const fallbackQuery = query(collection(db, 'deliveryNotes'), where('assignedDriverUid', '==', currentUid));
+    const emailQuery = currentEmail ? query(collection(db, 'deliveryNotes'), where('assignedDriverEmail', '==', currentEmail)) : null;
+    const readablePendingQuery = (() => {
+      try {
+        if (currentRole === 'manager') {
+          return query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'pending'), limit(200));
+        }
+        return query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'pending'), where('readableBy', 'array-contains', currentUid));
+      } catch (err) {
+        logDebug('build readablePendingQuery failed', { message: err?.message });
+        return null;
+      }
+    })();
+    let assignedSnap = null, createdSnap = null, fallbackSnap = null;
+    let emailSnap = null, readablePendingSnap = null;
+    try { assignedSnap = await getDocs(assignedQuery); } catch (err) { logDebug('assigned query failed', { code: err.code, message: err.message }); }
+    try { createdSnap = await getDocs(createdQuery); } catch (err) { logDebug('created query failed', { code: err.code, message: err.message }); }
+    try { fallbackSnap = await getDocs(fallbackQuery); } catch (err) { logDebug('fallback query failed', { code: err.code, message: err.message }); }
+    if (emailQuery) {
+      try { emailSnap = await getDocs(emailQuery); } catch (err) { logDebug('email query failed', { code: err.code, message: err.message }); }
+    }
+    if (readablePendingQuery) {
+      try { readablePendingSnap = await getDocs(readablePendingQuery); } catch (err) {
+        logDebug('readablePending query failed', { code: err.code, message: err.message });
+      }
+    }
+
+    const map = new Map();
+    const mergeDocs = (snap) => {
+      if (!snap) return;
+      snap.forEach(doc => {
+        map.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+    };
+    mergeDocs(assignedSnap);
+    mergeDocs(createdSnap);
+    mergeDocs(fallbackSnap);
+    mergeDocs(emailSnap);
+    mergeDocs(readablePendingSnap);
+    let items = Array.from(map.values()).filter(item => (item.signatureStatus || 'pending') === 'pending');
+    items.sort((a, b) => getTimestampValue(b.serverCreatedAt || b.createdAt) - getTimestampValue(a.serverCreatedAt || a.createdAt));
+    if (items.length > 100) items = items.slice(0, 100);
+
+    logDebug('pending count', { count: items.length });
+    if (items.length === 0 && pendingListEl.children.length === 0) {
+      renderEmptyState();
+    } else {
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        const date = (item.date || item.createdAt || '').toString().split('T')[0];
+        li.innerHTML = `<div>
+            <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
+            <div class="text-muted small">日期: ${date || '-'} · 金額: ${item.amount ? 'NT$ ' + item.amount : '-'} · 工時: ${item.totalHours ?? '-'}h</div>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" data-id="${item.id}"><i class="bi bi-pencil-square"></i></button>`;
+        li.addEventListener('click', (e) => {
+          // 若點到內部按鈕也一樣載入
+          const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id;
+          selectPending(targetId);
+        });
+        pendingListEl.appendChild(li);
+      });
+    }
+  } catch (e) {
+    // 理論上不會再進來；若進來一律以空清單結束，不再顯示紅色錯誤
+    console.warn('[SignDebug] loadPendingList unexpected error suppressed', e);
+    renderEmptyState();
+  } finally {
+    clearTimeout(to);
+    pendingLoadingEl.style.display = 'none';
+    pendingListEl.style.display = 'block';
+    if (timeoutHit) logDebug('timeout ended after fallback');
   }
 }
 
@@ -188,31 +376,31 @@ function selectPending(id) {
 
 function renderNote(d) {
   noteSection.classList.remove('d-none');
-  const formatNames = (arr, fallback) => {
-    try {
-      if (Array.isArray(arr) && arr.length > 0) {
-        return arr.map(x => x?.name || x?.displayName || x?.id || '').filter(Boolean).join('、');
-      }
-    } catch {}
-    return fallback || '-';
-  };
-  const machinesText = formatNames(d.machines, d.machine || '-');
-  const driversText = formatNames(d.drivers, d.driverName || '-');
   const date = (d.date || d.createdAt || '').toString().split('T')[0];
+  const driverName = d.driverName || d.assignedDriverName || (Array.isArray(d.assignedDriverNames) ? d.assignedDriverNames.find(Boolean) : '') || d.createdByName || '-';
+  const quantityText = formatQuantity(d.quantity);
+  const itemText = d.item || d.purpose || '-';
+  const machineText = getMachineLabel(d);
   noteBody.innerHTML = `
-    <div class="row g-2 small">
-      <div class="col-md-4"><strong>日期:</strong> ${date || '-'}</div>
-      <div class="col-md-4"><strong>客戶:</strong> ${d.customer || '-'}</div>
-      <div class="col-md-4"><strong>地點:</strong> ${d.location || '-'}</div>
-      <div class="col-md-12"><strong>作業狀況:</strong><br>${(d.work || '').replace(/\n/g,'<br>') || '-'}</div>
-      <div class="col-md-4"><strong>時間:</strong> ${(d.startTime||'') + (d.endTime?(' ~ '+d.endTime):'')}</div>
-      <div class="col-md-4"><strong>金額:</strong> ${d.amount? 'NT$ '+d.amount : '-'}</div>
-      <div class="col-md-4"><strong>機具:</strong> ${machinesText}</div>
-      <div class="col-md-4"><strong>車號:</strong> ${d.vehicleNumber||'-'}</div>
-      <div class="col-md-4"><strong>司機:</strong> ${driversText}</div>
-      <div class="col-md-12"><strong>備註:</strong> ${(d.remark||'').replace(/\n/g,'<br>')||'-'}</div>
+    <div class="row g-3 fs-6">
+      <div class="col-sm-6 col-xl-4"><strong>日期:</strong> <span class="ms-1">${date || '-'}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>客戶:</strong> <span class="ms-1">${d.customer || '-'}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>地點:</strong> <span class="ms-1">${d.location || '-'}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>司機:</strong> <span class="ms-1">${driverName}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>車號:</strong> <span class="ms-1">${d.vehicleNumber || '-'}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>機具:</strong> <span class="ms-1">${machineText}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>金額:</strong> <span class="ms-1">${d.amount ? 'NT$ ' + d.amount : '-'}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>時間:</strong> <span class="ms-1">${(d.startTime || '') + (d.endTime ? ' ~ ' + d.endTime : '')}</span></div>
+      <div class="col-sm-6 col-xl-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">收款狀態:</strong><span id="paidStatusText" class="ms-1">${d.paidAt ? PAID_BADGE_HTML : UNPAID_BADGE_HTML}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>物品:</strong> <span class="ms-1">${itemText}</span></div>
+      <div class="col-sm-6 col-xl-4"><strong>數量:</strong> <span class="ms-1">${quantityText}</span></div>
+      <div class="col-12"><strong>作業狀況:</strong><br>${(d.work || '').replace(/\n/g,'<br>') || '-'}</div>
+      <div class="col-12"><strong>備註:</strong><br>${(d.remark || '').replace(/\n/g,'<br>') || '-'}</div>
     </div>`;
   setStatusBadge(d.signatureStatus || 'pending');
+  const isCompleted = (d.signatureStatus || (d.signatureDataUrl ? 'completed' : 'pending')) === 'completed';
+    const shouldLock = !!d.paidAt || isCompleted;
+    applyPaidState(!!d.paidAt, shouldLock);
 
   const imgSrc = d.signatureUrl || d.signatureDataUrl;
   if (d.signatureStatus === 'completed' && imgSrc) {
@@ -326,17 +514,23 @@ async function saveSignature() {
         signatureStoragePath: filePath,
         signatureDataUrl: null,
         signedAt: serverTimestamp(),
-        signatureStatus: 'completed'
+        signatureStatus: 'completed',
+        paidAt: receivedCashEl?.checked ? serverTimestamp() : null
       });
       setStatusBadge('completed');
       showSignedPreview(url, new Date().toISOString());
       if (prev?.signatureStoragePath && prev.signatureStoragePath !== filePath) {
         deleteOldSignature(currentDocId, prev.signatureStoragePath);
       }
+      if (receivedCashEl?.checked) {
+        applyPaidState(true, true);
+      } else {
+        updatePaidStatusLabel();
+      }
     } else {
       // 離線：將 DataURL 暫存至離線簽單並加入簽章佇列
       const dataUrl = signaturePadCanvas.toDataURL('image/png');
-      updateOfflineNoteSignature(currentLocalId, dataUrl);
+      updateOfflineNoteSignature(currentLocalId, dataUrl, receivedCashEl?.checked === true);
       enqueueOfflineSignature({
         id: (crypto?.randomUUID?.() || (Date.now()+"_"+Math.random().toString(36).slice(2))),
         docId: null,
@@ -347,6 +541,11 @@ async function saveSignature() {
       });
       setStatusBadge('completed');
       showSignedPreview(dataUrl, new Date().toISOString());
+      if (receivedCashEl?.checked) {
+        applyPaidState(true, true);
+      } else {
+        updatePaidStatusLabel();
+      }
     }
   } catch (e) {
     alert('儲存失敗：' + e.message);
@@ -380,10 +579,9 @@ redoSignature?.addEventListener('click', async () => {
 
 saveBtn.addEventListener('click', saveSignature);
 reloadListBtn?.addEventListener('click', () => loadPendingList());
-
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await waitForUserContext();
   loadPendingList();
-  // URL 若帶 id 仍可直接載入（例如分享連結）
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
   if (id) selectPending(id);
@@ -442,7 +640,7 @@ function enqueueOfflineSignature(item) {
   }
 }
 
-function updateOfflineNoteSignature(localId, dataUrl) {
+function updateOfflineNoteSignature(localId, dataUrl, receivedCash = false) {
   try {
     const list = JSON.parse(localStorage.getItem(OFFLINE_NOTES_KEY) || '[]');
     const idx = list.findIndex(x => x.localId === localId);
@@ -450,6 +648,7 @@ function updateOfflineNoteSignature(localId, dataUrl) {
       list[idx].signatureStatus = 'completed';
       list[idx].signatureDataUrl = dataUrl;
       list[idx].signedAt = new Date().toISOString();
+      list[idx].paidAt = receivedCash ? new Date().toISOString() : null;
       localStorage.setItem(OFFLINE_NOTES_KEY, JSON.stringify(list));
       logDebug('offline note updated with signature', { localId });
     }
@@ -465,8 +664,6 @@ function injectLatestOffline() {
 
   // 建立現有清單鍵集合，避免重覆插入
   const existingKeys = new Set();
-  if (!pendingListEl) return;
-
   pendingListEl.querySelectorAll('li').forEach(li => {
     const btn = li.querySelector('button');
     if (!btn) return;
@@ -499,8 +696,8 @@ function injectLatestOffline() {
   });
 
   if (injected > 0) {
-    if (pendingLoadingEl) pendingLoadingEl.style.display = 'none';
-    noPendingEl?.classList.add('d-none');
+    pendingLoadingEl.style.display = 'none';
+    noPendingEl.classList.add('d-none');
     pendingListEl.style.display = 'block';
     logDebug('injectLatestOffline injected', { injected });
   }
