@@ -1,6 +1,6 @@
 // sign-delivery.js - 單獨簽章頁面
 import { db } from '../firebase-init.js';
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
 import { storage } from '../firebase-init.js';
 import { offlineManager } from './offline.js';
@@ -86,6 +86,7 @@ let userContextReady = false;
 let userContextPromise = null;
 let currentNoteData = null;
 let usageCheckInFlight = null;
+let unsubscribePendingRealtime = null;
 
 onUserRoleReady(({ role, profile }) => {
   if (role) currentRole = role;
@@ -372,6 +373,36 @@ async function loadPendingList() {
   }
 }
 
+// 啟用即時監聽：當 manager 建立新簽單或指派給司機時，司機端清單會立即更新
+function startRealtimePending() {
+  try {
+    if (!currentUid) return; // 尚未取得使用者
+    // 先取消舊監聽
+    if (typeof unsubscribePendingRealtime === 'function') {
+      unsubscribePendingRealtime();
+      unsubscribePendingRealtime = null;
+    }
+    const base = collection(db, 'deliveryNotes');
+    let q;
+    if (currentRole === 'manager') {
+      // 管理者：監聽所有待簽章（排序交給前端）
+      q = query(base, where('signatureStatus', '==', 'pending'));
+    } else {
+      // 司機：僅監聽自己看得到的待簽章
+      q = query(base, where('signatureStatus', '==', 'pending'), where('readableBy', 'array-contains', currentUid));
+    }
+    unsubscribePendingRealtime = onSnapshot(q, () => {
+      // 有任何變更時，重載一次清單（沿用既有渲染流程，避免大改）
+      try { loadPendingList(); } catch {}
+    }, (err) => {
+      console.warn('[SignDebug] realtime pending snapshot error', err?.message || err);
+    });
+    logDebug('realtime pending watcher started', { role: currentRole, uid: currentUid });
+  } catch (e) {
+    console.warn('[SignDebug] startRealtimePending failed', e);
+  }
+}
+
 function selectPending(id) {
   selectHintEl?.classList.add('d-none');
   loadNote(id);
@@ -639,6 +670,8 @@ reloadListBtn?.addEventListener('click', () => loadPendingList());
 document.addEventListener('DOMContentLoaded', async () => {
   await waitForUserContext();
   loadPendingList();
+  // 啟用即時監聽
+  startRealtimePending();
   const params = new URLSearchParams(location.search);
   const id = params.get('id');
   if (id) selectPending(id);

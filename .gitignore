@@ -59,3 +59,14 @@ pubsub-debug.log
 
 # OneDrive / sync metadata
 *.lnk
+electronic-approval-dev-firebase-adminsdk-*.json
+
+*.serviceAccount.json
+
+*.secret.json
+
+electronic-approval-dev-firebase-adminsdk-*.json
+
+*.serviceAccount.json
+
+*.secret.json

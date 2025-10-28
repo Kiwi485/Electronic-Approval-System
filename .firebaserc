@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "electronic-approval-dev"
-  }
+    "default": "electronic-approval-dev",
+    "dev": "electronic-approval-dev"
+  },
+  "targets": {},
+  "etags": {}
 }
