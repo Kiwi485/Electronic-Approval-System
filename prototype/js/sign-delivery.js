@@ -87,6 +87,35 @@ let userContextPromise = null;
 let currentNoteData = null;
 let usageCheckInFlight = null;
 let unsubscribePendingRealtime = null;
+let canvasDpr = 1;
+let canvasCssWidth = 0;
+let canvasCssHeight = 0;
+let pendingListLoadSeq = 0;
+
+function escapeAttrValue(value) {
+  if (value == null) return '';
+  if (window.CSS && typeof window.CSS.escape === 'function') {
+    return window.CSS.escape(String(value));
+  }
+  return String(value).replace(/"/g, '\"');
+}
+
+function clearOfflineInjectedRows() {
+  if (!pendingListEl) return;
+  pendingListEl.querySelectorAll('li[data-local-id]').forEach((node) => node.remove());
+}
+
+function removeExistingPendingEntry({ docId, localId }) {
+  if (!pendingListEl) return;
+  if (docId) {
+    const selector = `li[data-doc-id="${escapeAttrValue(docId)}"]`;
+    pendingListEl.querySelectorAll(selector).forEach(node => node.remove());
+  }
+  if (localId) {
+    const selector = `li[data-local-id="${escapeAttrValue(localId)}"]`;
+    pendingListEl.querySelectorAll(selector).forEach(node => node.remove());
+  }
+}
 
 onUserRoleReady(({ role, profile }) => {
   if (role) currentRole = role;
@@ -272,18 +301,26 @@ async function loadPendingList() {
     await waitForUserContext();
   }
   logDebug('loadPendingList start');
+  const runId = ++pendingListLoadSeq;
+  const isLatest = () => runId === pendingListLoadSeq;
   pendingListEl.style.display = 'none';
   pendingLoadingEl.style.display = 'block';
   noPendingEl.classList.add('d-none');
   pendingListEl.innerHTML = '';
 
-  // 先把離線待簽項目插到清單頂端（黃色），確保離線也能立刻看到
-  try { injectLatestOffline(); } catch (e) { logDebug('injectLatestOffline on load failed', { message: e.message }); }
+  if (navigator.onLine) clearOfflineInjectedRows();
+
+  // 僅在離線狀態下才注入離線項目，避免與線上資料重覆
+  if (!navigator.onLine) {
+    try { injectLatestOffline(); } catch (e) { logDebug('injectLatestOffline on load failed', { message: e.message }); }
+  }
   let timeoutHit = false;
   const to = setTimeout(() => {
     timeoutHit = true;
     logDebug('pendingList timeout fallback triggered (5s)');
-    pendingLoadingEl.innerHTML = '<span class="text-warning small">載入逾時，嘗試較簡單查詢...</span>';
+    if (isLatest()) {
+      pendingLoadingEl.innerHTML = '<span class="text-warning small">載入逾時，嘗試較簡單查詢...</span>';
+    }
   }, 5000);
   try {
     // 為了徹底避免因規則造成的全域 list 拒絕，簽章頁一律以「司機可見」範圍載入待簽清單
@@ -341,12 +378,30 @@ async function loadPendingList() {
     if (items.length > 100) items = items.slice(0, 100);
 
     logDebug('pending count', { count: items.length });
+    if (!isLatest()) return;
+
     if (items.length === 0 && pendingListEl.children.length === 0) {
       renderEmptyState();
     } else {
+      const renderedDocIds = new Set();
+      const renderedKeys = new Set();
       items.forEach(item => {
+        if (!isLatest()) return;
+        const key = item.id || item.localId;
+        if (key && renderedKeys.has(key)) {
+          logDebug('skip duplicate pending item', { key });
+          return;
+        }
+        if (item.id && renderedDocIds.has(item.id)) {
+          logDebug('skip duplicate docId', { docId: item.id });
+          return;
+        }
+        if (item.id) renderedDocIds.add(item.id);
+        if (key) renderedKeys.add(key);
+        removeExistingPendingEntry({ docId: item.id, localId: item.localId });
         const li = document.createElement('li');
         li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        li.dataset.docId = item.id;
         const date = (item.date || item.createdAt || '').toString().split('T')[0];
         li.innerHTML = `<div>
             <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} </div>
@@ -358,15 +413,16 @@ async function loadPendingList() {
           const targetId = e.target.closest('button')?.getAttribute('data-id') || item.id;
           selectPending(targetId);
         });
-        pendingListEl.appendChild(li);
+        if (isLatest()) pendingListEl.appendChild(li);
       });
     }
   } catch (e) {
     // 理論上不會再進來；若進來一律以空清單結束，不再顯示紅色錯誤
     console.warn('[SignDebug] loadPendingList unexpected error suppressed', e);
-    renderEmptyState();
+    if (isLatest()) renderEmptyState();
   } finally {
     clearTimeout(to);
+    if (!isLatest()) return;
     pendingLoadingEl.style.display = 'none';
     pendingListEl.style.display = 'block';
     if (timeoutHit) logDebug('timeout ended after fallback');
@@ -479,19 +535,43 @@ function showSignedPreview(dataUrl, signedAt) {
 
 function initCanvas() {
   if (!signaturePadCanvas) return;
+  // 設定 touch-action 防止頁面滑動干擾簽名
+  signaturePadCanvas.style.touchAction = 'none';
+
+  // 依裝置像素比調整畫布尺寸，避免高 DPI 位移/鋸齒
+  const rect = signaturePadCanvas.getBoundingClientRect();
+  canvasDpr = Math.max(window.devicePixelRatio || 1, 1);
+  canvasCssWidth = Math.max(1, Math.round(rect.width));
+  canvasCssHeight = Math.max(1, Math.round(rect.height));
+  signaturePadCanvas.style.width = `${canvasCssWidth}px`;
+  signaturePadCanvas.style.height = `${canvasCssHeight}px`;
+  signaturePadCanvas.width = Math.round(canvasCssWidth * canvasDpr);
+  signaturePadCanvas.height = Math.round(canvasCssHeight * canvasDpr);
+
   ctx = signaturePadCanvas.getContext('2d');
+  // 重設變換並依 DPR 縮放，讓座標以 CSS 像素為單位
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(canvasDpr, canvasDpr);
+
+  // 畫布底色與畫筆
   ctx.fillStyle = '#fff';
-  ctx.fillRect(0,0,signaturePadCanvas.width, signaturePadCanvas.height);
-  ctx.lineWidth = 2;
+  ctx.fillRect(0, 0, canvasCssWidth, canvasCssHeight);
+  ctx.lineWidth = 2;            // 以 CSS 像素計
   ctx.lineCap = 'round';
   ctx.strokeStyle = '#222';
   hasSignature = false;
 
+  // 以 CSS 座標取得指標位置（已用 ctx.scale 處理 DPR）
   const getPos = (evt) => {
-    const rect = signaturePadCanvas.getBoundingClientRect();
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
+    // 優先使用 offsetX/Y（相對於目標元素，對縮放/滾動相容性佳）
+    if (typeof evt.offsetX === 'number' && typeof evt.offsetY === 'number') {
+      return { x: evt.offsetX, y: evt.offsetY };
+    }
+    const r = signaturePadCanvas.getBoundingClientRect();
+    const t = evt.touches?.[0] || evt;
+    const clientX = (typeof t.clientX === 'number') ? t.clientX : (t.x ?? 0);
+    const clientY = (typeof t.clientY === 'number') ? t.clientY : (t.y ?? 0);
+    return { x: clientX - r.left, y: clientY - r.top };
   };
 
   let drawing = false;
@@ -500,6 +580,7 @@ function initCanvas() {
     e.preventDefault();
     drawing = true;
     last = getPos(e);
+    try { if (e.pointerId != null) signaturePadCanvas.setPointerCapture(e.pointerId); } catch {}
     ctx.beginPath();
     ctx.moveTo(last.x, last.y);
   };
@@ -512,19 +593,32 @@ function initCanvas() {
     hasSignature = true;
     saveBtn.disabled = false;
   };
-  const end = () => { drawing = false; };
+  const end = (e) => {
+    drawing = false;
+    if (e && e.pointerId != null) {
+      try { signaturePadCanvas.releasePointerCapture(e.pointerId); } catch {}
+    }
+  };
 
-  signaturePadCanvas.onmousedown = start;
-  signaturePadCanvas.onmousemove = move;
-  window.onmouseup = end;
-  signaturePadCanvas.ontouchstart = start;
-  signaturePadCanvas.ontouchmove = move;
-  window.ontouchend = end;
+  // 以 Pointer Events 為主，回退 mouse/touch
+  if ('onpointerdown' in window) {
+    signaturePadCanvas.addEventListener('pointerdown', start, { passive: false });
+    signaturePadCanvas.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end, { passive: false });
+  } else {
+    signaturePadCanvas.onmousedown = start;
+    signaturePadCanvas.onmousemove = move;
+    window.onmouseup = end;
+    signaturePadCanvas.ontouchstart = start;
+    signaturePadCanvas.ontouchmove = move;
+    window.ontouchend = end;
+  }
 
   clearBtn.onclick = () => {
-    ctx.clearRect(0,0,signaturePadCanvas.width, signaturePadCanvas.height);
+    // 清空畫布（CSS 像素空間）
+    ctx.clearRect(0, 0, canvasCssWidth, canvasCssHeight);
     ctx.fillStyle = '#fff';
-    ctx.fillRect(0,0,signaturePadCanvas.width, signaturePadCanvas.height);
+    ctx.fillRect(0, 0, canvasCssWidth, canvasCssHeight);
     hasSignature = false;
     saveBtn.disabled = true;
   };
@@ -752,6 +846,8 @@ function injectLatestOffline() {
   const latest = getOfflinePendingNotes();
   if (!Array.isArray(latest) || latest.length === 0) return;
 
+  if (navigator.onLine) return; // 僅離線模式顯示
+
   // 建立現有清單鍵集合，避免重覆插入
   const existingKeys = new Set();
   pendingListEl.querySelectorAll('li').forEach(li => {
@@ -766,8 +862,10 @@ function injectLatestOffline() {
     const key = item.localId;
     if (!key || existingKeys.has(key)) return; // 已存在不重覆插入
 
+    removeExistingPendingEntry({ docId: item.id, localId: item.localId });
     const li = document.createElement('li');
     li.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center list-group-item-warning';
+    li.dataset.localId = item.localId;
     const date = (item.date || item.createdAt || '').toString().split('T')[0];
     li.innerHTML = `<div>
         <div class="fw-semibold">${item.customer || '-'} / ${item.location || '-'} <span class="badge bg-warning text-dark ms-1">離線</span></div>
@@ -795,12 +893,20 @@ function injectLatestOffline() {
 
 // 事件驅動：離線筆數變更或 storage 變更時即時插入
 window.addEventListener('offline-count-changed', () => {
-  logDebug('offline-count-changed event received, inject latest offline');
-  try { injectLatestOffline(); } catch { loadPendingList(); }
+  logDebug('offline-count-changed event received');
+  if (!navigator.onLine) {
+    try { injectLatestOffline(); } catch { loadPendingList(); }
+  } else {
+    clearOfflineInjectedRows();
+  }
 });
 window.addEventListener('storage', (e) => {
   if (e.key === OFFLINE_NOTES_KEY) {
-    logDebug('storage event: offline notes changed, inject latest offline');
-    try { injectLatestOffline(); } catch { loadPendingList(); }
+    logDebug('storage event: offline notes changed');
+    if (!navigator.onLine) {
+      try { injectLatestOffline(); } catch { loadPendingList(); }
+    } else {
+      clearOfflineInjectedRows();
+    }
   }
 });
