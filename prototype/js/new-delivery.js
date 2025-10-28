@@ -10,13 +10,138 @@ console.log('🚀 new-delivery.js 已載入');
 
 const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
+const dateInput = document.getElementById('date');
+const driverField = document.getElementById('driverName');
+
+let cachedUserContextPromise = null;
+let selfDriverEntryCache = null;
+
+function fetchUserContext() {
+  if (!cachedUserContextPromise) {
+    cachedUserContextPromise = getUserContext().catch(err => {
+      console.warn('[Delivery] getUserContext failed', err);
+      return {};
+    });
+  }
+  return cachedUserContextPromise;
+}
+
+function resolveSelfDriverEntry(context = {}) {
+  if (selfDriverEntryCache) return selfDriverEntryCache;
+  const uid = (context.uid || context.user?.uid || '').trim();
+  const profile = context.profile || {};
+  const user = context.user || {};
+  const email = profile.email || user.email || null;
+  const name = profile.displayName || user.displayName || (email ? email.split('@')[0] : '目前司機');
+  const catalog = Array.isArray(window.__EAS_DRIVER_CATALOG) ? window.__EAS_DRIVER_CATALOG : [];
+  const match = catalog.find(entry => {
+    if (!entry) return false;
+    const entryId = (entry.id || entry.uid || entry.docId || '').trim();
+    if (uid && (entryId === uid || entry.uid === uid)) return true;
+    if (email && entry.email && entry.email.toLowerCase() === email.toLowerCase()) return true;
+    return false;
+  }) || null;
+  const displayName = match?.displayName || name || '目前司機';
+  const driverId = uid || match?.uid || match?.id || '';
+  const driverEmail = match?.email || email || null;
+  const driverDocId = match?.docId || ((match?.id && match.id !== driverId) ? match.id : null);
+  selfDriverEntryCache = {
+    id: driverId || uid || '',
+    name: displayName,
+    displayName,
+    docId: driverDocId || null,
+    email: driverEmail
+  };
+  if (!selfDriverEntryCache.id && driverEmail) {
+    selfDriverEntryCache.id = `email:${driverEmail}`;
+  }
+  return selfDriverEntryCache;
+}
+
+function enforceDriverUiLock(context = {}) {
+  if (!driverField) return;
+  const entry = resolveSelfDriverEntry(context);
+  if (!entry) return;
+  const displayName = entry.displayName || entry.name || '目前司機';
+  const isSelect = driverField.tagName?.toLowerCase() === 'select';
+  if (isSelect) {
+    const options = Array.from(driverField.options || []);
+    const isSelfOption = (opt) => {
+      if (!opt) return false;
+      if (entry.id && (opt.dataset.uid === entry.id || opt.dataset.id === entry.id)) return true;
+      if (entry.email && opt.dataset.email && opt.dataset.email.toLowerCase() === entry.email.toLowerCase()) return true;
+      if (!entry.id && opt.value === displayName) return true;
+      return false;
+    };
+    let targetOption = options.find(isSelfOption);
+    if (!targetOption) {
+      targetOption = document.createElement('option');
+      targetOption.value = displayName;
+      targetOption.textContent = displayName;
+      driverField.appendChild(targetOption);
+    }
+    targetOption.dataset.name = displayName;
+    if (entry.id) {
+      targetOption.dataset.id = entry.id;
+      targetOption.dataset.uid = entry.id;
+    }
+    if (entry.docId) targetOption.dataset.docId = entry.docId;
+    if (entry.email) targetOption.dataset.email = entry.email;
+    targetOption.selected = true;
+    driverField.value = targetOption.value;
+    driverField.disabled = true;
+    if (!driverField.__selfLockObserver) {
+      const observer = new MutationObserver(() => {
+        setTimeout(() => enforceDriverUiLock(context), 0);
+      });
+      observer.observe(driverField, { childList: true });
+      driverField.__selfLockObserver = observer;
+    }
+  } else {
+    driverField.value = displayName;
+    driverField.readOnly = true;
+    driverField.setAttribute('aria-readonly', 'true');
+  }
+  const multiSection = document.getElementById('multiDriverSection');
+  if (multiSection) multiSection.classList.add('d-none');
+  const multiChecks = document.querySelectorAll('#driversOptions input[type="checkbox"]');
+  multiChecks.forEach(cb => {
+    let isSelf = entry.id && (cb.dataset.uid === entry.id || cb.dataset.id === entry.id);
+    if (!isSelf && entry.email) {
+      const email = cb.dataset.email || '';
+      if (email && email.toLowerCase() === entry.email.toLowerCase()) isSelf = true;
+    }
+    cb.checked = isSelf;
+    cb.disabled = true;
+  });
+  const driversContainer = document.getElementById('driversOptions');
+  if (driversContainer && !driversContainer.__selfLockObserver) {
+    const observer = new MutationObserver(() => {
+      setTimeout(() => enforceDriverUiLock(context), 0);
+    });
+    observer.observe(driversContainer, { childList: true });
+    driversContainer.__selfLockObserver = observer;
+  }
+}
 
 // 預設表單日期為『今天』（本地時區），避免新增後『今日簽單』不計入
 function pad(n){ return String(n).padStart(2,'0'); }
 function localDateStr(d = new Date()) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-document.addEventListener('DOMContentLoaded', () => {
-  const dateEl = document.getElementById('date');
-  if (dateEl && !dateEl.value) dateEl.value = localDateStr();
+function setFormDateToToday(el = dateInput) {
+  if (!el) return;
+  el.value = localDateStr();
+}
+
+fetchUserContext().then(ctx => {
+  if (ctx?.role === 'driver') enforceDriverUiLock(ctx);
+}).catch(err => console.warn('[Delivery] enforceDriverUiLock failed', err));
+
+setFormDateToToday();
+document.addEventListener('DOMContentLoaded', () => setFormDateToToday());
+window.addEventListener('pageshow', () => setFormDateToToday());
+form?.addEventListener('reset', () => {
+  // wait for native reset to finish before overriding the value
+  setTimeout(() => setFormDateToToday(), 0);
 });
 
 async function waitForFlags(timeout = 1000) {
@@ -25,6 +150,72 @@ async function waitForFlags(timeout = 1000) {
     await new Promise(r => setTimeout(r, 50));
   }
   return window.APP_FLAGS;
+}
+
+function catalogLookupByName(name) {
+  if (!name) return null;
+  const trimmed = name.trim();
+  const catalog = Array.isArray(window.__EAS_DRIVER_CATALOG) ? window.__EAS_DRIVER_CATALOG : [];
+  return catalog.find(entry => entry?.displayName === trimmed || entry?.name === trimmed) || null;
+}
+
+function collectSelectedDrivers() {
+  const results = new Map();
+  const addDriver = (rawId, rawName, extras = {}) => {
+    const name = (rawName || '').trim();
+    if (!name) return;
+    const id = (rawId || '').trim();
+    const key = id || `name:${name}`;
+    if (results.has(key)) return;
+    let fromCatalog = null;
+    if (!id || !extras.docId || !extras.email) {
+      fromCatalog = catalogLookupByName(name);
+    }
+    const resolvedId = id || fromCatalog?.id || '';
+    const payload = {
+      id: resolvedId,
+      name,
+      displayName: extras.displayName || fromCatalog?.displayName || name,
+      docId: extras.docId || fromCatalog?.docId || null,
+      email: extras.email || fromCatalog?.email || null
+    };
+    results.set(key, payload);
+  };
+
+  const multiChecks = document.querySelectorAll('#driversOptions input[type="checkbox"]:checked');
+  multiChecks.forEach(cb => {
+    addDriver(cb.dataset.uid || cb.dataset.id || '', cb.dataset.display || cb.dataset.name || cb.value || '', {
+      displayName: cb.dataset.display || cb.dataset.name || '',
+      docId: cb.dataset.docId || '',
+      email: cb.dataset.email || ''
+    });
+  });
+
+  if (driverField) {
+    const tag = driverField.tagName?.toLowerCase();
+    if (tag === 'select') {
+      const opt = driverField.options[driverField.selectedIndex];
+      if (opt && opt.value) {
+        addDriver(opt.dataset.uid || opt.dataset.id || '', opt.dataset.display || opt.dataset.name || opt.textContent || opt.value, {
+          displayName: opt.dataset.display || opt.dataset.name || opt.textContent || opt.value,
+          docId: opt.dataset.docId || '',
+          email: opt.dataset.email || ''
+        });
+      }
+    } else {
+      const value = driverField.value ? driverField.value.trim() : '';
+      if (value) {
+        const catalog = catalogLookupByName(value);
+        addDriver(catalog?.id || '', value, {
+          displayName: catalog?.displayName || value,
+          docId: catalog?.docId || '',
+          email: catalog?.email || ''
+        });
+      }
+    }
+  }
+
+  return Array.from(results.values());
 }
 
 // 不在模組載入時就決定 mock/firestore（避免 config 仍在載入時被鎖定）
@@ -48,15 +239,88 @@ form?.addEventListener('submit', async (e) => {
     return;
   }
   const baseData = v.data;
-  const { uid, role, user, profile } = await getUserContext();
+  const context = await fetchUserContext();
+  const uid = context?.uid || context?.user?.uid || null;
+  const role = context?.role || null;
+  const user = context?.user || null;
+  const profile = context?.profile || null;
   const creatorUid = uid || null;
   const creatorRole = role || null;
-  const creatorEmail = user?.email || profile?.email || null;
+  const creatorEmail = profile?.email || user?.email || null;
+  const creatorEmailLower = (creatorEmail || '').toLowerCase();
   const creatorName = profile?.displayName || user?.displayName || null;
-  const driverIds = Array.isArray(baseData.drivers) ? baseData.drivers.map(d => d?.id).filter(Boolean) : [];
+  const quantityValue = (baseData && typeof baseData.quantity !== 'undefined') ? Number(baseData.quantity) : null;
+
+  const matchesCreatorEntry = (entry) => {
+    if (!entry) return false;
+    const rawId = entry.id ?? entry.uid ?? null;
+    let entryId = '';
+    if (typeof rawId === 'string') {
+      entryId = rawId.trim();
+    } else if (rawId) {
+      entryId = String(rawId).trim();
+    }
+    if (entryId && creatorUid && entryId === creatorUid) return true;
+    const entryEmailLower = (entry.email || '').toLowerCase();
+    if (creatorEmailLower && entryEmailLower && entryEmailLower === creatorEmailLower) return true;
+    if (creatorEmailLower && entryId) {
+      const entryIdLower = entryId.toLowerCase();
+      if (entryIdLower === creatorEmailLower) return true;
+      if (entryIdLower === `email:${creatorEmailLower}`) return true;
+    }
+    return false;
+  };
+
+  let selectedDrivers = collectSelectedDrivers().filter(Boolean);
+  let shouldDropCreatorFromAssignment = false;
+
+  if (creatorRole === 'driver') {
+    const selfDriver = resolveSelfDriverEntry(context);
+    const normalized = selfDriver ? { ...selfDriver } : null;
+    const fallbackName = creatorName || (creatorEmail ? creatorEmail.split('@')[0] : '目前司機');
+    if (normalized) {
+      normalized.id = normalized.id || creatorUid || normalized.id;
+      normalized.displayName = normalized.displayName || fallbackName;
+      normalized.name = normalized.displayName;
+      normalized.email = normalized.email || creatorEmail || null;
+    }
+    selectedDrivers = normalized ? [normalized] : [{
+      id: creatorUid || '',
+      name: fallbackName,
+      displayName: fallbackName,
+      docId: null,
+      email: creatorEmail || null
+    }];
+    if (driverField) {
+      const chosen = selectedDrivers[0]?.displayName || selectedDrivers[0]?.name || fallbackName;
+      driverField.value = chosen;
+    }
+  } else if (selectedDrivers.length) {
+    const hasOtherDriver = selectedDrivers.some(entry => entry && !matchesCreatorEntry(entry));
+    if (hasOtherDriver) {
+      selectedDrivers = selectedDrivers.filter(entry => entry && !matchesCreatorEntry(entry));
+      shouldDropCreatorFromAssignment = true;
+    }
+  }
+
+  selectedDrivers = selectedDrivers.filter(Boolean);
+
+  let driverIds = selectedDrivers.map(d => d?.id).filter(Boolean);
+  if (creatorRole === 'driver' && creatorUid && !driverIds.includes(creatorUid)) {
+    driverIds.push(creatorUid);
+  }
+  driverIds = Array.from(new Set(driverIds));
   const assignedSet = new Set(driverIds);
-  if (creatorUid && creatorRole === 'driver') {
+  if (creatorRole === 'driver' && creatorUid) {
     assignedSet.add(creatorUid);
+  }
+  if (shouldDropCreatorFromAssignment && creatorUid) {
+    assignedSet.delete(creatorUid);
+    if (creatorEmailLower) {
+      const emailKey = `email:${creatorEmailLower}`;
+      assignedSet.delete(emailKey);
+      assignedSet.delete(creatorEmailLower);
+    }
   }
   const assignedTo = Array.from(assignedSet);
   const readableBy = Array.from(new Set([...assignedSet, creatorUid].filter(Boolean)));
@@ -65,16 +329,22 @@ form?.addEventListener('submit', async (e) => {
     localId: crypto.randomUUID(),
     ...baseData,
     signatureStatus: baseData.signatureStatus || 'pending',
-    // 預設為未收款（供首頁「未收款」統計使用）
+    // 預設為待收款（供首頁「待收款」統計使用）
     paidAt: null,
+    quantity: Number.isFinite(quantityValue) ? Number(quantityValue) : null,
     createdAt: new Date().toISOString(),
     createdBy: creatorUid,
     createdByRole: creatorRole,
     createdByEmail: creatorEmail,
     createdByName: creatorName,
     assignedTo,
-    readableBy
+    readableBy,
+    drivers: selectedDrivers,
+    driverIds
   };
+  if (!data.driverName && selectedDrivers.length) {
+    data.driverName = selectedDrivers[0].displayName || selectedDrivers[0].name;
+  }
   submitBtn.disabled = true;
   const originalText = submitBtn.innerHTML;
   submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>處理中...';

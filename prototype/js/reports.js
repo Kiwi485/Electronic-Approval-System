@@ -11,6 +11,7 @@ const filterDateStart = document.getElementById('filterDateStart');
 const filterDateEnd = document.getElementById('filterDateEnd');
 const filterCustomer = document.getElementById('filterCustomer');
 const filterMachine = document.getElementById('filterMachine');
+const MACHINE_PLACEHOLDER_REGEX = /選擇機具/;
 const filterDriver = document.getElementById('filterDriver');
 const sortableHeaders = Array.from(document.querySelectorAll('th.sortable'));
 const machineCatalog = {
@@ -72,7 +73,6 @@ const CSV_HEADERS = [
   'origin',
   'destination',
   'quantity',
-  'unit',
   'amount',
   'receivedCash',
   'modelName',
@@ -82,7 +82,7 @@ const CSV_HEADERS = [
 
 // 匯出時顯示的中文表頭（順序需與 CSV_HEADERS 對應）
 const EXPORT_LABELS_ZH = [
-  '日期', '客戶', '物品', '起點', '訖點', '數量', '單位', '金額', '已收現金', '型號/品名', '司機姓名', '車號'
+  '日期', '客戶', '物品', '起點', '訖點', '數量', '金額', '收款狀態', '型號/品名', '司機姓名', '車號'
 ];
 
 init();
@@ -324,7 +324,6 @@ function renderTable() {
       <td>${row.origin || '-'}</td>
       <td>${row.destination || '-'}</td>
       <td class="text-end">${formatNumber(row.quantity)}</td>
-      <td>${row.unit || '-'}</td>
       <td class="text-end">${formatCurrency(row.amount)}</td>
       <td>${renderReceivedCash(row.receivedCash)}</td>
       <td>${row.modelName || '-'}</td>
@@ -341,7 +340,7 @@ function renderErrorRow(message) {
   if (!tableBody) return;
   tableBody.innerHTML = `
     <tr>
-      <td colspan="12" class="text-center text-muted py-4">${message}</td>
+      <td colspan="11" class="text-center text-muted py-4">${message}</td>
     </tr>
   `;
   updateFooter();
@@ -357,9 +356,9 @@ function updateFooter() {
 
 function renderReceivedCash(received) {
   if (received === true) {
-    return '<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>已收</span>';
+    return '<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>已收款</span>';
   }
-  return '<span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>待收</span>';
+  return '<span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>待收款</span>';
 }
 
 function formatNumber(value) {
@@ -399,6 +398,7 @@ function adaptDeliveryNoteToReportRow(note = {}) {
     ?? (typeof note.machine === 'string' ? note.machine : '')
     ?? '';
   let modelName = typeof modelSource === 'string' ? modelSource.trim() : (modelSource ? String(modelSource).trim() : '');
+  if (modelName && MACHINE_PLACEHOLDER_REGEX.test(modelName)) modelName = '';
   const modelAlias = normalizeId(modelName);
 
   if (!machineId && modelAlias) {
@@ -415,6 +415,10 @@ function adaptDeliveryNoteToReportRow(note = {}) {
     modelName = nameFromCatalogById;
   } else if (nameFromCatalogByModel) {
     modelName = nameFromCatalogByModel;
+  }
+
+  if (modelName && MACHINE_PLACEHOLDER_REGEX.test(modelName)) {
+    modelName = '';
   }
 
   return {
@@ -495,23 +499,44 @@ async function ensureMachineCatalog(force = false) {
 
 function normalizeDateValue(value) {
   if (!value) return { value: null, display: '' };
+  const pad = (n) => String(n).padStart(2, '0');
+  const buildResult = (dateObj) => {
+    if (!dateObj) return { value: null, display: '' };
+    const normalized = new Date(dateObj.getTime());
+    normalized.setHours(0, 0, 0, 0);
+    const display = `${normalized.getFullYear()}-${pad(normalized.getMonth() + 1)}-${pad(normalized.getDate())}`;
+    return { value: normalized, display };
+  };
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const pureDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (pureDateMatch) {
+      const [, y, m, d] = pureDateMatch;
+      const normalized = new Date(Number(y), Number(m) - 1, Number(d));
+      normalized.setHours(0, 0, 0, 0);
+      return { value: normalized, display: trimmed };
+    }
+  }
+
   let dateObj = null;
   if (value instanceof Date) {
-    dateObj = new Date(value.getTime());
+    dateObj = value;
   } else if (typeof value === 'string') {
     const parsed = new Date(value);
     dateObj = Number.isNaN(parsed.getTime()) ? null : parsed;
-  } else if (typeof value.toDate === 'function') {
+  } else if (value && typeof value.toDate === 'function') {
     try {
       dateObj = value.toDate();
     } catch {
       dateObj = null;
     }
+  } else if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = new Date(value);
+    dateObj = Number.isNaN(parsed.getTime()) ? null : parsed;
   }
-  if (!dateObj) return { value: null, display: '' };
-  dateObj.setHours(0, 0, 0, 0);
-  const display = dateObj.toISOString().slice(0, 10);
-  return { value: dateObj, display };
+
+  return buildResult(dateObj);
 }
 
 function normalizeReceivedCash(note) {
@@ -602,10 +627,9 @@ async function exportXlsx() {
     '起點': r.origin || '',
     '訖點': r.destination || '',
     '數量': r.quantity ?? '',
-    '單位': r.unit || '',
     '金額': r.amount ?? '',
-    '已收現金': r.receivedCash ? '是' : '否',
-    '型號/品名': r.modelName || '',
+    '收款狀態': r.receivedCash ? '已收款' : '待收款',
+    '型號/品名': r.modelName || '-',
     '司機姓名': r.driverName || '',
     '車號': r.vehicleNumber || ''
   }));

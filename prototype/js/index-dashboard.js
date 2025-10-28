@@ -42,7 +42,7 @@ function formatDateTime(val) {
 
 // ---- DOM 目標（不改 HTML，採結構選擇）----
 const cardNumbers = Array.from(document.querySelectorAll('.card-dashboard .card-body .display-4'));
-// 預期順序：0 今日簽單；1 待簽核；2 本週完成；3 未收款
+// 預期順序：0 今日簽單；1 待簽核；2 本週完成；3 待收款
 const todayTableBody = document.querySelector('.card.mb-4 tbody'); // 今日簽單列表（第一個列表卡）
 const recentList = document.querySelector('.list-group'); // 最近完成（唯一 list-group）
 

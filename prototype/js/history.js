@@ -27,6 +27,104 @@ function formatTimeRange(item) {
   return `${item.startTime || ''}${item.endTime ? ' ~ ' + item.endTime : ''}`;
 }
 
+function formatQuantity(value) {
+  if (value === null || value === undefined) return '-';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num.toLocaleString('zh-TW', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+}
+
+function getItemDisplay(item) {
+  const value = item.item || item.purpose;
+  if (!value) return '-';
+  const text = String(value).trim();
+  return text || '-';
+}
+
+function getDriverDisplay(item) {
+  const pick = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const text = pick(entry);
+        if (text) return text;
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      const name = value.displayName || value.name || value.label;
+      if (name) return String(name).trim();
+      return '';
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed;
+    }
+    return String(value).trim();
+  };
+  const candidates = [
+    item.driverName,
+    item.assignedDriverName,
+    item.assignedDriverNames,
+    item.assignedDrivers,
+    item.createdByName,
+    item.assignedDriverEmail,
+    item.createdByEmail
+  ];
+  for (const candidate of candidates) {
+    const text = pick(candidate);
+    if (text) return text;
+  }
+  return '-';
+}
+
+function getMachineDisplay(item) {
+  const isPlaceholder = (text) => typeof text === 'string' && /選擇機具/.test(text);
+  const pick = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const text = pick(entry);
+        if (text) {
+          if (isPlaceholder(text)) return '';
+          return text;
+        }
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      const name = value.modelName || value.displayName || value.name || value.label || value.title;
+      if (name) {
+        const text = String(name).trim();
+        if (isPlaceholder(text)) return '';
+        return text;
+      }
+      return '';
+    }
+    if (typeof value === 'string') {
+      const text = value.trim();
+      if (isPlaceholder(text)) return '';
+      return text;
+    }
+    const text = String(value).trim();
+    if (isPlaceholder(text)) return '';
+    return text;
+  };
+  const candidates = [
+    item.machineName,
+    item.modelName,
+    item.machineModel,
+    item.machine,
+    item.machines,
+    item.machineId
+  ];
+  for (const candidate of candidates) {
+    const text = pick(candidate);
+    if (text) return text;
+  }
+  return '-';
+}
+
 function applyFilter() {
   const c = searchCustomer.value.trim().toLowerCase();
   const d = searchDate.value.trim();
@@ -61,7 +159,7 @@ function renderTable() {
   const pageItems = filtered.slice(start, start + PAGE_SIZE);
   if (pageItems.length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="7" class="text-center text-muted py-4">無符合資料</td>`;
+      tr.innerHTML = `<td colspan="7" class="text-center text-muted py-4">無符合資料</td>`;
     tbody.appendChild(tr);
     return;
   }
@@ -72,8 +170,9 @@ function renderTable() {
     const sigBadge = sigStatus === 'completed'
       ? '<span class="badge bg-success">已簽</span>'
       : '<span class="badge bg-warning text-dark">待簽</span>';
+    const driverName = getDriverDisplay(item);
     tr.innerHTML = `
-      <td title="${item.offline ? '離線暫存尚未同步' : ''}">${item.id || item.localId || '-'}</td>
+      <td title="${item.offline ? '離線暫存尚未同步' : ''}">${driverName}</td>
       <td>${formatDate(item.date || item.createdAt)}</td>
       <td>${item.customer || '-'}</td>
       <td>${item.location || '-'}</td>
@@ -120,17 +219,40 @@ tbody?.addEventListener('click', (e) => {
   const id = btn.getAttribute('data-id');
   const item = allData.find(x => (x.id || x.localId) == id);
   if (!item) return;
+  const driverName = getDriverDisplay(item);
+  const quantityText = formatQuantity(item.quantity);
+  const itemText = getItemDisplay(item);
+  const machineText = getMachineDisplay(item);
+  const paidBadge = item.paidAt
+    ? '<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>已收款</span>'
+    : '<span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>待收款</span>';
+  const signatureBadge = ((item.signatureStatus || (item.signatureDataUrl ? 'completed' : 'pending')) === 'completed')
+    ? '<span class="badge bg-success">已簽章</span>'
+    : '<span class="badge bg-warning text-dark">待簽章</span>';
+  const syncBadge = item.offline
+    ? '<span class="badge bg-warning text-dark">離線暫存</span>'
+    : '<span class="badge bg-success">已同步</span>';
+  const detailLink = itemText;
   detailBody.innerHTML = `
-    <div class="row g-2">
-      <div class="col-6"><strong>日期:</strong> ${formatDate(item.date || item.createdAt)}</div>
-      <div class="col-6"><strong>客戶:</strong> ${item.customer || '-'}</div>
-      <div class="col-12"><strong>地點:</strong> ${item.location || '-'}</div>
+    <div class="row g-3 align-items-start">
+      <div class="col-sm-6 col-lg-4"><strong>日期:</strong> <span class="ms-1">${formatDate(item.date || item.createdAt)}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>客戶:</strong> <span class="ms-1">${item.customer || '-'}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>地點:</strong> <span class="ms-1">${item.location || '-'}</span></div>
+
+      <div class="col-sm-6 col-lg-4"><strong>司機:</strong> <span class="ms-1">${driverName}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>金額:</strong> <span class="ms-1">${item.amount ? 'NT$ ' + item.amount : '-'}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>時間:</strong> <span class="ms-1">${formatTimeRange(item)}</span></div>
+
+      <div class="col-sm-6 col-lg-4"><strong>物品:</strong> <span class="ms-1">${detailLink}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>數量:</strong> <span class="ms-1">${quantityText}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>機具:</strong> <span class="ms-1">${machineText}</span></div>
+      <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">簽章狀態:</strong><span class="ms-1">${signatureBadge}</span></div>
+
+      <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">收款狀態:</strong><span class="ms-1">${paidBadge}</span></div>
+      <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">同步狀態:</strong><span class="ms-1">${syncBadge}</span></div>
+
       <div class="col-12"><strong>作業狀況:</strong><br>${(item.work || '').replace(/\n/g,'<br>') || '-'}</div>
-      <div class="col-4"><strong>時間:</strong> ${formatTimeRange(item)}</div>
-      <div class="col-4"><strong>金額:</strong> ${item.amount ? 'NT$ ' + item.amount : '-'}</div>
-      <div class="col-4"><strong>簽章狀態:</strong> ${(item.signatureStatus || (item.signatureDataUrl ? 'completed' : 'pending')) === 'completed' ? '<span class=\'badge bg-success\'>已簽章</span>' : '<span class=\'badge bg-warning text-dark\'>待簽章</span>'}</div>
-      <div class="col-6"><strong>LocalId:</strong> ${item.localId || '-'}</div>
-      <div class="col-6"><strong>狀態:</strong> ${item.offline ? '<span class="badge bg-warning text-dark">離線暫存</span>' : '<span class="badge bg-success">已同步</span>'}</div>
+      <div class="col-12"><strong>備註:</strong><br>${(item.remark||'').replace(/\n/g,'<br>')||'-'}</div>
     </div>`;
   detailModal?.show();
 });
