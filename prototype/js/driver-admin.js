@@ -84,7 +84,6 @@ function renderTable(drivers) {
       <tr data-driver-id="${driver.id}">
         <td>
           <div class="fw-semibold">${driver.displayName || '-'}</div>
-          <div class="text-muted small">ID: ${driver.id}</div>
         </td>
         <td><span class="badge bg-info text-dark">driver</span></td>
         <td>${renderStatusBadge(driver.isActive)}</td>
