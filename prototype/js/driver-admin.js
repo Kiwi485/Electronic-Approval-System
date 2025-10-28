@@ -1,4 +1,5 @@
 import { listAllDrivers, createDriver, updateDriver, deleteDriver } from './api/index.js';
+import { getUserContext } from './session-context.js';
 
 const tableBody = document.querySelector('#driverTable tbody');
 const alertBox = document.getElementById('alertBox');
@@ -21,6 +22,7 @@ const savingSpinner = document.getElementById('savingSpinner');
 const modal = new bootstrap.Modal(modalEl);
 let driversCache = [];
 let editingId = null;
+let isReadOnly = false; // 非管理者時僅顯示、不可操作
 
 function resetStats() {
   if (!totalCountEl) return;
@@ -90,13 +92,13 @@ function renderTable(drivers) {
         <td>${driver.phone ?? '—'}</td>
         <td>
           <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary edit-btn" data-id="${driver.id}">
+            <button class="btn btn-outline-secondary edit-btn" data-id="${driver.id}" ${isReadOnly ? 'disabled' : ''}>
               <i class="bi bi-pencil-square me-1"></i>編輯
             </button>
-            <button class="btn btn-outline-${driver.isActive ? 'warning' : 'success'} toggle-btn" data-id="${driver.id}">
+            <button class="btn btn-outline-${driver.isActive ? 'warning' : 'success'} toggle-btn" data-id="${driver.id}" ${isReadOnly ? 'disabled' : ''}>
               <i class="bi ${driver.isActive ? 'bi-slash-circle' : 'bi-check-circle'} me-1"></i>${driver.isActive ? '停用' : '啟用'}
             </button>
-            <button class="btn btn-outline-danger delete-btn" data-id="${driver.id}">
+            <button class="btn btn-outline-danger delete-btn" data-id="${driver.id}" ${isReadOnly ? 'disabled' : ''}>
               <i class="bi bi-trash me-1"></i>刪除
             </button>
           </div>
@@ -105,7 +107,7 @@ function renderTable(drivers) {
     `)
     .join('');
 
-  attachRowHandlers();
+  if (!isReadOnly) attachRowHandlers();
 }
 
 function attachRowHandlers() {
@@ -126,7 +128,17 @@ function attachRowHandlers() {
         await refreshTable();
       } catch (error) {
         console.error('Toggle driver failed:', error);
-        showAlert('狀態切換失敗，請稍後再試');
+        const codeRaw = error?.code || error?.details?.code || '';
+        const code = (typeof codeRaw === 'string') ? codeRaw.replace(/^functions\//, '') : '';
+        if (code === 'permission-denied') {
+          showAlert('沒有權限：此操作僅限管理者', 'warning', 4000);
+        } else if (code === 'unauthenticated') {
+          showAlert('請先登入後再試', 'warning', 4000);
+        } else if (/unavailable|deadline-exceeded/i.test(String(error))) {
+          showAlert('服務暫時不可用，請確認 Functions 是否啟動', 'warning', 5000);
+        } else {
+          showAlert('狀態切換失敗，請稍後再試');
+        }
         btn.disabled = false;
       }
     });
@@ -208,6 +220,15 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
+  // 新增司機時 Email 必填（需要建立 Auth 帳號）
+  if (!editingId) {
+    const email = (emailInput.value || '').trim();
+    if (!email) {
+      showAlert('Email 為必填，建立帳號需使用 Email');
+      return;
+    }
+  }
+
   const payload = {
     displayName,
     email: normalizeOptional(emailInput.value),
@@ -219,30 +240,78 @@ form.addEventListener('submit', async (event) => {
   saveBtn.disabled = true;
   savingSpinner.classList.remove('d-none');
 
+  let saveSucceeded = false;
   try {
     if (editingId) {
       await updateDriver(editingId, payload);
       showAlert('更新成功', 'success');
     } else {
-      await createDriver(payload);
-      showAlert('新增成功', 'success');
+      const created = await createDriver(payload);
+      if (created?.tempPassword) {
+        showAlert(`新增成功。初始密碼：${created.tempPassword}`, 'success', 6000);
+      } else {
+        showAlert('新增成功', 'success');
+      }
     }
-    modal.hide();
-    await refreshTable();
+    saveSucceeded = true;
   } catch (error) {
     console.error('Save driver failed:', error);
-    showAlert('儲存失敗，請稍後再試');
+    const codeRaw = error?.code || error?.details?.code || '';
+    const code = (typeof codeRaw === 'string') ? codeRaw.replace(/^functions\//, '') : '';
+    if (code === 'permission-denied') {
+      showAlert('沒有權限：此操作僅限管理者', 'warning', 4000);
+    } else if (code === 'unauthenticated') {
+      showAlert('請先登入後再試', 'warning', 4000);
+    } else if (/unavailable|failed-precondition|deadline-exceeded/i.test(String(error))) {
+      showAlert('服務暫時不可用，請確認 Functions 是否啟動', 'warning', 5000);
+    } else if (/Email is required/i.test(String(error?.message))) {
+      showAlert('Email 為必填，建立帳號需使用 Email');
+    } else {
+      showAlert('儲存失敗，請稍後再試');
+    }
   } finally {
     saveBtn.disabled = false;
     savingSpinner.classList.add('d-none');
   }
+
+  // 儲存成功後，再關閉視窗並刷新表格；就算刷新失敗，也不要覆蓋前面的成功訊息
+  if (saveSucceeded) {
+    try { modal.hide(); } catch {}
+    try {
+      await refreshTable();
+    } catch (e) {
+      console.warn('Refresh after save failed:', e);
+      showAlert('已儲存，但更新清單失敗，請重新整理頁面', 'warning', 5000);
+    }
+  }
 });
 
-addBtn.addEventListener('click', openCreateModal);
+addBtn.addEventListener('click', () => {
+  if (isReadOnly) {
+    showAlert('沒有權限：此操作僅限管理者', 'warning');
+    return;
+  }
+  openCreateModal();
+});
 modalEl.addEventListener('hidden.bs.modal', () => {
   form.reset();
   editingId = null;
   hideAlert();
 });
 
-refreshTable();
+(async function initRole() {
+  try {
+    const ctx = await getUserContext();
+    isReadOnly = (ctx.role !== 'manager');
+    if (isReadOnly) {
+      addBtn.classList.add('disabled');
+      addBtn.setAttribute('aria-disabled', 'true');
+      addBtn.title = '此操作僅限管理者';
+      showAlert('目前為唯讀模式（需要管理者權限）', 'warning', 3500);
+    }
+  } catch (e) {
+    console.warn('[driver-admin] failed to determine role', e);
+  } finally {
+    refreshTable();
+  }
+})();
