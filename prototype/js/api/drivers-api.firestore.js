@@ -22,9 +22,17 @@ try {
     const app = getApp();
     functionsSvc = getFunctions(app, 'asia-east1');
     // 在本機環境自動連 Emulator（若 firebase-init 已連接過，第二次呼叫不會有副作用）
-    const host = location.hostname;
+    const host = (typeof location !== 'undefined' && location.hostname) ? location.hostname : 'localhost';
     if (host === 'localhost' || host === '127.0.0.1') {
-      try { connectFunctionsEmulator(functionsSvc, 'localhost', 5001); } catch (e) { /* ignore */ }
+      try {
+        connectFunctionsEmulator(functionsSvc, host, 5001);
+        if (!functionsSvc.customDomain) {
+          functionsSvc.customDomain = `http://${host}:5001`;
+        }
+        console.info('[drivers-api] Connected to Functions emulator', { host, port: 5001, customDomain: functionsSvc.customDomain });
+      } catch (e) {
+        console.warn('[drivers-api] connectFunctionsEmulator failed', e);
+      }
     }
   }
 } catch (e) {

@@ -24,9 +24,9 @@ const seedCategories = [
 ];
 
 const seedMachines = [
-  { id: 'm-pc200', name: 'PC200 挖土機', categoryId: 'excavator', isActive: true },
-  { id: 'm-sumito', name: '住友吊車 S1', categoryId: 'crane', isActive: true },
-  { id: 'm-retire', name: '報廢示範機', categoryId: 'old-machine', isActive: false }
+  { id: 'm-pc200', name: 'PC200 挖土機', categoryId: 'excavator', vehicleNumber: 'ABC-1234', isActive: true },
+  { id: 'm-sumito', name: '住友吊車 S1', categoryId: 'crane', vehicleNumber: 'DEF-5678', isActive: true },
+  { id: 'm-retire', name: '報廢示範機', categoryId: 'old-machine', vehicleNumber: 'ZZZ-0000', isActive: false }
 ];
 
 const seedDrivers = [

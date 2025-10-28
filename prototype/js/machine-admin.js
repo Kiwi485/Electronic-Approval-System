@@ -1,4 +1,7 @@
 import { listAllMachines, listCategories, createMachine, updateMachine, deleteMachine } from './api/index.v2.js';
+import { resolveMachineIdForNote, getUsageDateForMachine, primeMachineCatalogCache } from './machine-usage.js';
+import { db } from '../firebase-init.js';
+import { collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 
 const tableBody = document.querySelector('#machineTable tbody');
 const alertBox = document.getElementById('alertBox');
@@ -8,6 +11,7 @@ const modal = new bootstrap.Modal(modalEl);
 const form = document.getElementById('machineForm');
 const modalTitle = document.getElementById('modalTitle');
 const nameInput = document.getElementById('machineName');
+const vehicleInput = document.getElementById('machineVehicle');
 const categorySelect = document.getElementById('machineCategory');
 const activeInput = document.getElementById('machineActive');
 const saveBtn = document.getElementById('saveBtn');
@@ -21,6 +25,87 @@ const DEFAULT_CATEGORIES = [
   { id: 'maintenance', name: '維修' },
   { id: 'standby', name: '待命中' }
 ];
+
+function toTimestamp(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  return date.getTime();
+}
+
+async function fetchCompletedDeliveryNotes() {
+  const useMock = window.APP_FLAGS?.USE_MOCK_DATA === true;
+  if (useMock) {
+    return { list: [], source: 'mock' };
+  }
+  try {
+    const completedQuery = query(collection(db, 'deliveryNotes'), where('signatureStatus', '==', 'completed'));
+    const snap = await getDocs(completedQuery);
+    return { list: snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })), source: 'firestore' };
+  } catch (err) {
+    console.warn('[MachineAdmin] 無法載入已簽章簽單', err);
+    return { list: [], source: 'error' };
+  }
+}
+
+async function buildUsageMapFromSignedNotes(machines) {
+  const usageMap = new Map();
+  let total = 0;
+
+  const useMock = window.APP_FLAGS?.USE_MOCK_DATA === true;
+  if (useMock) {
+    machines.forEach(machine => {
+      const count = machine.usageCount ?? 0;
+      usageMap.set(machine.id, {
+        count,
+        lastUsedAt: toTimestamp(machine.lastUsedAt)
+      });
+      total += count;
+    });
+    return { usageMap, total };
+  }
+
+  const { list: notes, source } = await fetchCompletedDeliveryNotes();
+  if (source === 'error') {
+    machines.forEach(machine => {
+      const count = machine.usageCount ?? 0;
+      usageMap.set(machine.id, {
+        count,
+        lastUsedAt: toTimestamp(machine.lastUsedAt)
+      });
+      total += count;
+    });
+    return { usageMap, total };
+  }
+
+  if (!notes.length) {
+    return { usageMap, total: 0 };
+  }
+
+  console.info('[MachineAdmin] 依簽單重新統計機具使用次數', { completedCount: notes.length });
+
+  for (const note of notes) {
+    try {
+      const machineId = await resolveMachineIdForNote(note);
+      if (!machineId) continue;
+      const entry = usageMap.get(machineId) || { count: 0, lastUsedAt: null };
+      entry.count += 1;
+      total += 1;
+      const usageDate = getUsageDateForMachine(note);
+      if (usageDate) {
+        const ts = usageDate.getTime();
+        if (!entry.lastUsedAt || ts > entry.lastUsedAt) {
+          entry.lastUsedAt = ts;
+        }
+      }
+      usageMap.set(machineId, entry);
+    } catch (err) {
+      console.warn('[MachineAdmin] 無法解析簽單的機具資訊', { noteId: note?.id, message: err?.message });
+    }
+  }
+
+  return { usageMap, total };
+}
 
 function showAlert(msg, type = 'danger') {
   alertBox.textContent = msg;
@@ -46,24 +131,23 @@ function renderCategoryOptions(selectedId = '') {
   `;
 }
 
-function updateStats(machines) {
+function updateStats(machines, overrideTotalUsage = null) {
   document.getElementById('totalCount').textContent = machines.length;
   document.getElementById('activeCount').textContent = machines.filter(m => m.isActive).length;
   document.getElementById('inactiveCount').textContent = machines.filter(m => !m.isActive).length;
-  document.getElementById('totalUsage').textContent = machines.reduce((sum, m) => sum + (m.usageCount || 0), 0);
+  const total = overrideTotalUsage !== null ? overrideTotalUsage : machines.reduce((sum, m) => sum + (m.usageCount || 0), 0);
+  document.getElementById('totalUsage').textContent = total;
 }
 
-function renderTable(machines) {
+function renderTable(machines, usageSummary = null) {
   const allCats = getAllCategories();
   tableBody.innerHTML = machines.map(m => `
     <tr data-machine-id="${m.id}">
       <td>${m.name}</td>
+      <td>${m.vehicleNumber || '-'}</td>
       <td>${allCats.find(c => c.id === m.categoryId)?.name || '-'}</td>
       <td>${m.isActive ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
-      <td>
-        <input type="number" class="form-control form-control-sm usage-input" 
-               data-id="${m.id}" value="${m.usageCount ?? 0}" min="0" style="width: 80px;">
-      </td>
+      <td><span class="badge bg-info text-dark">${m.usageCount ?? 0}</span></td>
       <td>${m.lastUsedAt ? new Date(m.lastUsedAt).toLocaleString('zh-TW') : '-'}</td>
       <td>
         <button class="btn btn-sm btn-secondary edit-btn" data-id="${m.id}" type="button">編輯</button>
@@ -74,7 +158,7 @@ function renderTable(machines) {
       </td>
     </tr>
   `).join('');
-  updateStats(machines);
+  updateStats(machines, usageSummary?.total ?? null);
   
   // 重新綁定事件
   attachTableEvents();
@@ -91,6 +175,7 @@ function attachTableEvents() {
       if (!machine) return showAlert('找不到機具資料');
 
       nameInput.value = machine.name;
+      if (vehicleInput) vehicleInput.value = machine.vehicleNumber || '';
       renderCategoryOptions(machine.categoryId);
       activeInput.checked = !!machine.isActive;
       modal.show();
@@ -139,28 +224,6 @@ function attachTableEvents() {
     };
   });
 
-  // 使用次數輸入框
-  tableBody.querySelectorAll('.usage-input').forEach(input => {
-    input.onchange = async () => {
-      const id = input.dataset.id;
-      const newCount = parseInt(input.value, 10);
-      if (isNaN(newCount) || newCount < 0) {
-        showAlert('使用次數必須是非負整數');
-        await refreshTable();
-        return;
-      }
-      try {
-        input.disabled = true;
-        await updateMachine(id, { usageCount: newCount, updatedAt: Date.now() });
-        showAlert('使用次數已更新', 'success');
-        await refreshTable();
-      } catch (err) {
-        console.error('Update usage error:', err);
-        showAlert('更新失敗');
-        input.disabled = false;
-      }
-    };
-  });
 }
 
 async function loadCategories() {
@@ -178,7 +241,20 @@ async function refreshTable() {
   await loadCategories();
   try {
     machinesCache = await listAllMachines();
-    renderTable(machinesCache);
+    primeMachineCatalogCache(machinesCache);
+    const usageStats = await buildUsageMapFromSignedNotes(machinesCache);
+    machinesCache = machinesCache.map(machine => {
+      const usage = usageStats.usageMap.get(machine.id);
+      const rawFallback = toTimestamp(machine.lastUsedAt);
+      const lastUsedMs = usage?.lastUsedAt ?? rawFallback;
+      const hasTimestamp = Number.isFinite(lastUsedMs);
+      return {
+        ...machine,
+        usageCount: usage?.count ?? 0,
+        lastUsedAt: hasTimestamp ? new Date(lastUsedMs).toISOString() : null
+      };
+    });
+    renderTable(machinesCache, usageStats);
   } catch (err) {
     console.error('Refresh table error:', err);
     showAlert('載入機具失敗');
@@ -190,6 +266,7 @@ addBtn.onclick = () => {
   modalTitle.textContent = '新增機具';
   form.reset();
   renderCategoryOptions('');
+  if (vehicleInput) vehicleInput.value = '';
   activeInput.checked = true;
   modal.show();
 };
@@ -199,6 +276,7 @@ form.addEventListener('submit', async e => {
   saveBtn.disabled = true;
 
   const name = nameInput.value.trim();
+  const vehicleNumber = vehicleInput ? vehicleInput.value.trim() : '';
   const categoryId = categorySelect.value;
   const isActive = activeInput.checked;
 
@@ -212,13 +290,18 @@ form.addEventListener('submit', async e => {
     saveBtn.disabled = false;
     return;
   }
+  if (vehicleInput && !vehicleNumber) {
+    showAlert('車號不可空');
+    saveBtn.disabled = false;
+    return;
+  }
 
   try {
     if (editingId) {
-      await updateMachine(editingId, { name, categoryId, isActive, updatedAt: Date.now() });
+      await updateMachine(editingId, { name, vehicleNumber, categoryId, isActive, updatedAt: Date.now() });
       showAlert('更新成功', 'success');
     } else {
-      await createMachine({ name, categoryId, isActive, usageCount: 0, updatedAt: Date.now() });
+      await createMachine({ name, vehicleNumber, categoryId, isActive, usageCount: 0, updatedAt: Date.now() });
       showAlert('新增成功', 'success');
     }
     modal.hide();

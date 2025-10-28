@@ -14,9 +14,9 @@ let _categories = [
 
 // 初始機具資料
 let _machines = [
-  { id: 'm1', name: 'PC200 挖土機', categoryId: 'excavator', isActive: true, usageCount: 0, lastUsedAt: null },
-  { id: 'm2', name: '住友吊車 S1', categoryId: 'crane', isActive: true, usageCount: 3, lastUsedAt: null },
-  { id: 'm3', name: '報廢示例機', categoryId: 'old-machine', isActive: false, usageCount: 10, lastUsedAt: null }
+  { id: 'm1', name: 'PC200 挖土機', categoryId: 'excavator', vehicleNumber: 'ABC-1234', isActive: true, usageCount: 0, lastUsedAt: null },
+  { id: 'm2', name: '住友吊車 S1', categoryId: 'crane', vehicleNumber: 'DEF-5678', isActive: true, usageCount: 3, lastUsedAt: null },
+  { id: 'm3', name: '報廢示例機', categoryId: 'old-machine', vehicleNumber: 'ZZZ-0000', isActive: false, usageCount: 10, lastUsedAt: null }
 ];
 
 const delay = (ms=140) => new Promise(r => setTimeout(r, ms));
@@ -37,6 +37,7 @@ export async function createMachine(input) {
     id: randomUUID(),
     name: input.name.trim(),
     categoryId: input.categoryId || null,
+    vehicleNumber: input.vehicleNumber ? String(input.vehicleNumber).trim() : '',
     isActive: true,
     usageCount: 0,
     lastUsedAt: null
@@ -49,7 +50,11 @@ export async function updateMachine(id, patch) {
   await delay();
   const idx = _machines.findIndex(m => m.id === id);
   if (idx === -1) throw new Error('Machine not found: ' + id);
-  _machines[idx] = { ... _machines[idx], ...patch };
+  const next = { ..._machines[idx], ...patch };
+  if (patch.vehicleNumber !== undefined) {
+    next.vehicleNumber = patch.vehicleNumber ? String(patch.vehicleNumber).trim() : '';
+  }
+  _machines[idx] = next;
   return { ..._machines[idx] };
 }
 
@@ -84,9 +89,9 @@ export function __resetMockData() {
     { id: 'old-machine', name: '舊機具(停用示例)', isActive: false, order: 99 }
   ];
   _machines = [
-    { id: 'm1', name: 'PC200 挖土機', categoryId: 'excavator', isActive: true, usageCount: 0, lastUsedAt: null },
-    { id: 'm2', name: '住友吊車 S1', categoryId: 'crane', isActive: true, usageCount: 3, lastUsedAt: null },
-    { id: 'm3', name: '報廢示例機', categoryId: 'old-machine', isActive: false, usageCount: 10, lastUsedAt: null }
+    { id: 'm1', name: 'PC200 挖土機', categoryId: 'excavator', vehicleNumber: 'ABC-1234', isActive: true, usageCount: 0, lastUsedAt: null },
+    { id: 'm2', name: '住友吊車 S1', categoryId: 'crane', vehicleNumber: 'DEF-5678', isActive: true, usageCount: 3, lastUsedAt: null },
+    { id: 'm3', name: '報廢示例機', categoryId: 'old-machine', vehicleNumber: 'ZZZ-0000', isActive: false, usageCount: 10, lastUsedAt: null }
   ];
 }
 

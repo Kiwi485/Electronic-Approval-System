@@ -8,6 +8,7 @@
  *   id: string,
  *   name: string,
  *   categoryId: string|null,
+ *   vehicleNumber: string|null,
  *   isActive: boolean,
  *   usageCount: number,
  *   lastUsedAt: string|null  // ISO 字串或 null
@@ -31,7 +32,7 @@ export async function listAllMachines() {
 }
 
 /**
- * @param {{name:string, categoryId:string|null}} input
+ * @param {{name:string, categoryId:string|null, vehicleNumber?:string|null}} input
  */
 export async function createMachine(input) {
   throw new Error('machines-api.contract: createMachine not implemented');
@@ -39,7 +40,7 @@ export async function createMachine(input) {
 
 /**
  * @param {string} id
- * @param {{name?:string, categoryId?:string|null, isActive?:boolean}} patch
+ * @param {{name?:string, categoryId?:string|null, vehicleNumber?:string|null, isActive?:boolean}} patch
  */
 export async function updateMachine(id, patch) {
   throw new Error('machines-api.contract: updateMachine not implemented');

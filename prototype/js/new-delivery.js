@@ -12,6 +12,8 @@ const form = document.getElementById('deliveryForm');
 const submitBtn = form?.querySelector("button[type='submit']");
 const dateInput = document.getElementById('date');
 const driverField = document.getElementById('driverName');
+const machineField = document.getElementById('machine');
+const vehicleField = document.getElementById('vehicleNumber');
 
 let cachedUserContextPromise = null;
 let selfDriverEntryCache = null;
@@ -124,6 +126,92 @@ function enforceDriverUiLock(context = {}) {
   }
 }
 
+function getMachineCatalogSnapshot() {
+  const list = Array.isArray(window.__EAS_MACHINE_CATALOG) ? window.__EAS_MACHINE_CATALOG : [];
+  return list.map(item => ({
+    id: item?.id || '',
+    name: item?.name || '',
+    vehicleNumber: item?.vehicleNumber || ''
+  }));
+}
+
+function lookupMachineMetaById(id) {
+  if (!id) return null;
+  const catalog = getMachineCatalogSnapshot();
+  return catalog.find(entry => entry.id === id) || null;
+}
+
+function getSelectedMachineMeta() {
+  if (!machineField) return null;
+  const tag = machineField.tagName?.toLowerCase();
+  if (tag !== 'select') {
+    const value = machineField.value ? machineField.value.trim() : '';
+    if (!value) return null;
+    const catalog = getMachineCatalogSnapshot();
+    return catalog.find(entry => entry.name === value) || null;
+  }
+  const opt = machineField.options?.[machineField.selectedIndex];
+  if (!opt || !opt.value) return null;
+  const id = opt.value.trim();
+  if (!id) return null;
+  const meta = {
+    id,
+    name: (opt.dataset?.name || opt.text || '').trim(),
+    vehicleNumber: (opt.dataset?.vehicle || '').trim()
+  };
+  if (!meta.vehicleNumber) {
+    const fallback = lookupMachineMetaById(id);
+    if (fallback?.vehicleNumber) meta.vehicleNumber = fallback.vehicleNumber.trim();
+  }
+  return meta;
+}
+
+function applyVehicleBinding(meta) {
+  if (!vehicleField) return;
+  if (meta && meta.vehicleNumber) {
+    const previous = vehicleField.value;
+    vehicleField.value = meta.vehicleNumber;
+    vehicleField.readOnly = true;
+    vehicleField.setAttribute('aria-readonly', 'true');
+    vehicleField.dataset.boundMachineId = meta.id || '';
+    if (vehicleField.value !== previous) {
+      try {
+        vehicleField.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch {}
+    }
+  } else if (meta) {
+    vehicleField.dataset.boundMachineId = meta.id || '';
+    vehicleField.readOnly = false;
+    vehicleField.removeAttribute('aria-readonly');
+  } else {
+    vehicleField.dataset.boundMachineId = '';
+    vehicleField.readOnly = false;
+    vehicleField.removeAttribute('aria-readonly');
+  }
+}
+
+function syncVehicleFieldFromSelection() {
+  const meta = getSelectedMachineMeta();
+  if (!meta) {
+    if (vehicleField) {
+      if (vehicleField.dataset.boundMachineId) {
+        const prev = vehicleField.value;
+        vehicleField.value = '';
+        if (prev) {
+          try {
+            vehicleField.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch {}
+        }
+      }
+      vehicleField.dataset.boundMachineId = '';
+      vehicleField.readOnly = false;
+      vehicleField.removeAttribute('aria-readonly');
+    }
+    return;
+  }
+  applyVehicleBinding(meta);
+}
+
 // 預設表單日期為『今天』（本地時區），避免新增後『今日簽單』不計入
 function pad(n){ return String(n).padStart(2,'0'); }
 function localDateStr(d = new Date()) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
@@ -136,12 +224,37 @@ fetchUserContext().then(ctx => {
   if (ctx?.role === 'driver') enforceDriverUiLock(ctx);
 }).catch(err => console.warn('[Delivery] enforceDriverUiLock failed', err));
 
+if (machineField) {
+  machineField.addEventListener('change', () => {
+    syncVehicleFieldFromSelection();
+  });
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('machine-catalog-updated', () => {
+    syncVehicleFieldFromSelection();
+  });
+}
+
 setFormDateToToday();
 document.addEventListener('DOMContentLoaded', () => setFormDateToToday());
 window.addEventListener('pageshow', () => setFormDateToToday());
+document.addEventListener('DOMContentLoaded', () => {
+  syncVehicleFieldFromSelection();
+});
+if (document.readyState !== 'loading') {
+  syncVehicleFieldFromSelection();
+}
 form?.addEventListener('reset', () => {
   // wait for native reset to finish before overriding the value
   setTimeout(() => setFormDateToToday(), 0);
+  if (vehicleField) {
+    setTimeout(() => {
+      vehicleField.readOnly = false;
+      vehicleField.removeAttribute('aria-readonly');
+      vehicleField.dataset.boundMachineId = '';
+    }, 0);
+  }
 });
 
 async function waitForFlags(timeout = 1000) {

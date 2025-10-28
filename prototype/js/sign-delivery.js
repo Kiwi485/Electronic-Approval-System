@@ -6,6 +6,7 @@ import { storage } from '../firebase-init.js';
 import { offlineManager } from './offline.js';
 import { waitAuthReady } from './auth.js';
 import { getUserContext, onUserRoleReady } from './session-context.js';
+import { ensureUsageAppliedForDelivery } from './machine-usage.js';
 
 console.info('[SignDelivery] layout version 20251027c');
 
@@ -83,6 +84,8 @@ let currentUid = null;
 let currentEmail = null;
 let userContextReady = false;
 let userContextPromise = null;
+let currentNoteData = null;
+let usageCheckInFlight = null;
 
 onUserRoleReady(({ role, profile }) => {
   if (role) currentRole = role;
@@ -375,6 +378,7 @@ function selectPending(id) {
 }
 
 function renderNote(d) {
+  currentNoteData = d ? { ...d } : null;
   noteSection.classList.remove('d-none');
   const date = (d.date || d.createdAt || '').toString().split('T')[0];
   const driverName = d.driverName || d.assignedDriverName || (Array.isArray(d.assignedDriverNames) ? d.assignedDriverNames.find(Boolean) : '') || d.createdByName || '-';
@@ -401,6 +405,25 @@ function renderNote(d) {
   const isCompleted = (d.signatureStatus || (d.signatureDataUrl ? 'completed' : 'pending')) === 'completed';
     const shouldLock = !!d.paidAt || isCompleted;
     applyPaidState(!!d.paidAt, shouldLock);
+
+  if (isCompleted && currentDocId && !currentNoteData?.machineUsageApplied) {
+    const token = Symbol('usage-check');
+    usageCheckInFlight = token;
+    ensureUsageAppliedForDelivery({ docId: currentDocId, noteData: currentNoteData, reason: 'sign-delivery-view' })
+      .then((result) => {
+        if (usageCheckInFlight !== token) return;
+        if (result && (result.applied || result.alreadyApplied)) {
+          currentNoteData.machineUsageApplied = true;
+          if (result.machineId && !currentNoteData.machineId) {
+            currentNoteData.machineId = result.machineId;
+          }
+        }
+      })
+      .catch(err => console.warn('[SignDebug] ensure usage on view failed', err))
+      .finally(() => {
+        if (usageCheckInFlight === token) usageCheckInFlight = null;
+      });
+  }
 
   const imgSrc = d.signatureUrl || d.signatureDataUrl;
   if (d.signatureStatus === 'completed' && imgSrc) {
@@ -503,6 +526,9 @@ async function saveSignature() {
     if (currentDocId && navigator.onLine) {
       // 線上：上傳至 Storage 並更新文件
       let prev; try { prev = (await getDoc(doc(db,'deliveryNotes', currentDocId))).data(); } catch {}
+      const referenceNote = prev || currentNoteData || {};
+      const alreadyApplied = referenceNote?.machineUsageApplied === true;
+      const shouldApplyMachineUsage = !alreadyApplied;
       const blob = await canvasToBlob(signaturePadCanvas);
       if (!blob) throw new Error('無法取得簽章影像');
       const filePath = `signatures/${currentDocId}_${Date.now()}.png`;
@@ -517,8 +543,31 @@ async function saveSignature() {
         signatureStatus: 'completed',
         paidAt: receivedCashEl?.checked ? serverTimestamp() : null
       });
+      if (shouldApplyMachineUsage) {
+        const usageResult = await ensureUsageAppliedForDelivery({ docId: currentDocId, noteData: referenceNote, reason: 'sign-delivery-online' });
+        if (usageResult && (usageResult.applied || usageResult.alreadyApplied)) {
+          referenceNote.machineUsageApplied = true;
+          if (usageResult.machineId && !referenceNote.machineId) {
+            referenceNote.machineId = usageResult.machineId;
+          }
+          if (currentNoteData) {
+            currentNoteData.machineUsageApplied = true;
+            if (usageResult.machineId && !currentNoteData.machineId) {
+              currentNoteData.machineId = usageResult.machineId;
+            }
+          }
+        }
+      }
       setStatusBadge('completed');
-      showSignedPreview(url, new Date().toISOString());
+      const localSignedAt = new Date().toISOString();
+      showSignedPreview(url, localSignedAt);
+      if (currentNoteData) {
+        currentNoteData.signatureStatus = 'completed';
+        currentNoteData.signedAt = localSignedAt;
+        if (receivedCashEl?.checked) {
+          currentNoteData.paidAt = currentNoteData.paidAt || localSignedAt;
+        }
+      }
       if (prev?.signatureStoragePath && prev.signatureStoragePath !== filePath) {
         deleteOldSignature(currentDocId, prev.signatureStoragePath);
       }
@@ -540,7 +589,15 @@ async function saveSignature() {
         createdAt: new Date().toISOString(),
       });
       setStatusBadge('completed');
-      showSignedPreview(dataUrl, new Date().toISOString());
+      const localOfflineSignedAt = new Date().toISOString();
+      showSignedPreview(dataUrl, localOfflineSignedAt);
+      if (currentNoteData) {
+        currentNoteData.signatureStatus = 'completed';
+        currentNoteData.signedAt = localOfflineSignedAt;
+        if (receivedCashEl?.checked) {
+          currentNoteData.paidAt = currentNoteData.paidAt || localOfflineSignedAt;
+        }
+      }
       if (receivedCashEl?.checked) {
         applyPaidState(true, true);
       } else {
