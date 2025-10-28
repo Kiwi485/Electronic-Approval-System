@@ -117,3 +117,17 @@
 html[data-user-role="driver"] .role-manager-only {
     display: none !important;
 }
+
+.header-username {
+    display: inline-block;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    color: #fff;
+}
+
+.cursor-not-allowed {
+    cursor: not-allowed !important;
+}

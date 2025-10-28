@@ -238,6 +238,7 @@ function buildValidatedPayload() {
     let machineId = '';
     let machineName = '';
     let modelName = '';
+    let machineVehicle = '';
     if (form.machine) {
         const mEl = form.machine;
         try {
@@ -246,6 +247,7 @@ function buildValidatedPayload() {
                 machineId = opt && opt.value ? opt.value : '';
                 machineName = opt && opt.dataset && opt.dataset.name ? opt.dataset.name : (opt ? opt.text : '');
                 modelName = opt && opt.dataset && (opt.dataset.model || opt.dataset.modelname) ? (opt.dataset.model || opt.dataset.modelname) : machineName;
+                machineVehicle = opt && opt.dataset && opt.dataset.vehicle ? opt.dataset.vehicle : '';
             } else {
                 // input / datalist fallback — we only have the free-form text
                 machineName = mEl.value ? mEl.value.trim() : '';
@@ -261,6 +263,12 @@ function buildValidatedPayload() {
     }
 
     ({ id: machineId, name: machineName, model: modelName } = sanitizeMachineSelection(machineId, machineName, modelName));
+    if (!machineId && !machineName) {
+        machineVehicle = '';
+    }
+
+    const vehicleField = form.vehicleNumber ? form.vehicleNumber.value.trim() : '';
+    const resolvedVehicleNumber = (machineVehicle || '').trim() || vehicleField;
 
     const data = {
         customer: form.customer.value.trim(),
@@ -282,7 +290,7 @@ function buildValidatedPayload() {
         machineId: machineId,
         machineName: machineName,
         modelName: modelName,
-        vehicleNumber: form.vehicleNumber ? form.vehicleNumber.value.trim() : '',
+        vehicleNumber: resolvedVehicleNumber,
         driverName: form.driverName ? form.driverName.value.trim() : '',
         remark: form.remark ? form.remark.value.trim() : '',
         signatureDataUrl: null,

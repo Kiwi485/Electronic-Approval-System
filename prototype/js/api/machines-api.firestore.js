@@ -35,12 +35,19 @@ const toFirestoreDate = (value) => {
   return null;
 };
 
+const normalizeVehicleNumber = (value) => {
+  if (value === null || value === undefined) return '';
+  const str = typeof value === 'string' ? value : String(value);
+  return str.trim();
+};
+
 const toMachineModel = (snapshot) => {
   const data = snapshot.data() || {};
   return {
     id: snapshot.id,
     name: data.name || '',
     categoryId: data.categoryId ?? null,
+    vehicleNumber: data.vehicleNumber || '',
     isActive: data.isActive !== false,
     usageCount: data.usageCount ?? 0,
     lastUsedAt: timestampToIso(data.lastUsedAt),
@@ -77,6 +84,7 @@ export async function createMachine(input) {
   const payload = {
     name: input.name?.trim() ?? '',
     categoryId: input.categoryId || null,
+    vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
     isActive: true,
     usageCount: 0,
     lastUsedAt: null,
@@ -94,6 +102,7 @@ export async function updateMachine(id, patch) {
 
   if (patch.name !== undefined) updates.name = patch.name?.trim() ?? '';
   if (patch.categoryId !== undefined) updates.categoryId = patch.categoryId || null;
+  if (patch.vehicleNumber !== undefined) updates.vehicleNumber = normalizeVehicleNumber(patch.vehicleNumber);
   if (patch.isActive !== undefined) updates.isActive = !!patch.isActive;
   if (patch.usageCount !== undefined) updates.usageCount = Number(patch.usageCount) || 0;
   if (patch.lastUsedAt !== undefined) updates.lastUsedAt = toFirestoreDate(patch.lastUsedAt);

@@ -40,17 +40,31 @@ async function initMachinesUi() {
     const normalize = m => ({
       id: m?.id ?? '',
       name: m?.name ?? '',
+      vehicleNumber: m?.vehicleNumber ?? '',
       isActive: m?.isActive !== false
     });
     let cleaned = machines.map(normalize).filter(m => m.id && m.name);
     cleaned = cleaned.filter(m => m.isActive);
+
+    try {
+      window.__EAS_MACHINE_CATALOG = cleaned.map(m => ({
+        id: m.id,
+        name: m.name,
+        vehicleNumber: m.vehicleNumber,
+        isActive: m.isActive
+      }));
+      window.dispatchEvent(new CustomEvent('machine-catalog-updated', { detail: { machines: window.__EAS_MACHINE_CATALOG } }));
+    } catch (e) {
+      console.warn('[UI] 無法更新 machine catalog 快取', e);
+    }
 
     if (isSelect) {
       const select = elem;
       const opts = cleaned.map(m => {
         const safeId = String(m.id).replace(/"/g, '&quot;');
         const safeName = (m.name || '').replace(/"/g, '&quot;');
-        return `<option value="${safeId}" data-name="${safeName}" data-model="${safeName}">${safeName}</option>`;
+        const safeVehicle = (m.vehicleNumber || '').replace(/"/g, '&quot;');
+        return `<option value="${safeId}" data-name="${safeName}" data-model="${safeName}" data-vehicle="${safeVehicle}">${safeName}</option>`;
       }).join('');
       select.innerHTML = `<option value="">— 選擇機具 —</option>` + opts;
       console.info(`[UI] 機具 select 載入完成 (active only)，共 ${cleaned.length} 筆，來源=${wantMock ? 'mock' : 'firestore'}`);

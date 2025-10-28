@@ -1,8 +1,9 @@
 // offline.js - 離線資料管理與自動同步
 // 提供 window.offlineManager 供其他模組使用
 import { db, storage } from '../firebase-init.js';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, limit, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit, doc, updateDoc, getDoc } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-storage.js';
+import { ensureUsageAppliedForDelivery } from './machine-usage.js';
 
 class OfflineManager {
   constructor() {
@@ -27,6 +28,24 @@ class OfflineManager {
   markUploaded(localId) {
     const list = this.getUploadedLocalIds();
     if (!list.includes(localId)) { list.push(localId); this._writeArray(this.uploadedKey, list); }
+  }
+
+  async _ensureMachineUsageApplied(docId, noteData, reason) {
+    if (!docId) return;
+    if (noteData && (noteData.signatureStatus || 'pending') !== 'completed' && reason === 'offline-sync-add') {
+      return;
+    }
+    try {
+      const result = await ensureUsageAppliedForDelivery({ docId, noteData, reason });
+      if (result && (result.applied || result.alreadyApplied) && noteData) {
+        noteData.machineUsageApplied = true;
+        if (result.machineId && !noteData.machineId) {
+          noteData.machineId = result.machineId;
+        }
+      }
+    } catch (err) {
+      console.warn('[Offline] ensure machine usage failed', { docId, reason, message: err?.message });
+    }
   }
 
   // 儲存離線資料
@@ -92,6 +111,10 @@ class OfflineManager {
         console.log('[Offline] 同步成功 localId=', note.localId, ' => docId=', addedRef.id);
         this._removeByLocalId(note.localId);
         this.markUploaded(note.localId);
+        const noteStatus = (note.signatureStatus || ((note.signatureUrl || note.signatureDataUrl) ? 'completed' : 'pending'));
+        if (noteStatus === 'completed') {
+          await this._ensureMachineUsageApplied(addedRef.id, note, 'offline-sync-add');
+        }
 
         // 套用對應 localId 的離線簽章（會上傳 PNG 至 Storage 並更新 Firestore）
         try {
@@ -168,6 +191,7 @@ class OfflineManager {
       const remain = this._readSigQueue().filter(x => x.id !== sigItem.id);
       this._writeSigQueue(remain);
       console.log('[Offline] 已套用離線簽章到 docId=', docId);
+      await this._ensureMachineUsageApplied(docId, null, 'offline-queue-signature');
     } catch (err) {
       console.warn('[Offline] 套用簽章至 doc 失敗', docId, err);
     }

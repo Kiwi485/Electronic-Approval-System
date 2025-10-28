@@ -90,7 +90,10 @@ function primeAllDropdowns() {
   function applyHeaderDisplayName() {
     if (!headerDisplayName) return;
     const span = document.getElementById('currentUserEmail');
-    if (span) span.textContent = headerDisplayName;
+    if (span) {
+      span.textContent = headerDisplayName;
+      span.title = headerDisplayName;
+    }
   }
 
   function applyNotificationUi() {

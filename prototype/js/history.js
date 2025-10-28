@@ -125,6 +125,47 @@ function getMachineDisplay(item) {
   return '-';
 }
 
+function getVehicleDisplay(item) {
+  const visit = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const text = visit(entry);
+        if (text) return text;
+      }
+      return '';
+    }
+    if (typeof value === 'object') {
+      const keys = ['vehicleNumber', 'number', 'plate', 'display', 'label', 'value'];
+      for (const key of keys) {
+        if (value[key]) {
+          const inner = visit(value[key]);
+          if (inner) return inner;
+        }
+      }
+      return '';
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed;
+    }
+    return String(value).trim();
+  };
+
+  const candidates = [
+    item.vehicleNumber,
+    item.vehicle,
+    item.vehicleInfo,
+    item.vehiclePlate,
+    item.vehicleNo
+  ];
+  for (const candidate of candidates) {
+    const text = visit(candidate);
+    if (text) return text;
+  }
+  return '-';
+}
+
 function applyFilter() {
   const c = searchCustomer.value.trim().toLowerCase();
   const d = searchDate.value.trim();
@@ -208,6 +249,7 @@ function updateOfflineStatus(state) {
 // 詳情 Modal
 const detailModalEl = document.getElementById('detailModal');
 const detailBody = detailModalEl?.querySelector('.modal-body');
+const detailSyncInfo = detailModalEl?.querySelector('#detailSyncInfo');
 let detailModal;
 if (detailModalEl && window.bootstrap) {
   detailModal = new bootstrap.Modal(detailModalEl);
@@ -223,6 +265,7 @@ tbody?.addEventListener('click', (e) => {
   const quantityText = formatQuantity(item.quantity);
   const itemText = getItemDisplay(item);
   const machineText = getMachineDisplay(item);
+  const vehicleText = getVehicleDisplay(item);
   const paidBadge = item.paidAt
     ? '<span class="badge bg-success"><i class="bi bi-cash-coin me-1"></i>已收款</span>'
     : '<span class="badge bg-secondary"><i class="bi bi-clock-history me-1"></i>待收款</span>';
@@ -233,6 +276,10 @@ tbody?.addEventListener('click', (e) => {
     ? '<span class="badge bg-warning text-dark">離線暫存</span>'
     : '<span class="badge bg-success">已同步</span>';
   const detailLink = itemText;
+  if (detailSyncInfo) {
+    detailSyncInfo.innerHTML = syncBadge;
+    detailSyncInfo.classList.toggle('d-none', !syncBadge);
+  }
   detailBody.innerHTML = `
     <div class="row g-3 align-items-start">
       <div class="col-sm-6 col-lg-4"><strong>日期:</strong> <span class="ms-1">${formatDate(item.date || item.createdAt)}</span></div>
@@ -246,10 +293,10 @@ tbody?.addEventListener('click', (e) => {
       <div class="col-sm-6 col-lg-4"><strong>物品:</strong> <span class="ms-1">${detailLink}</span></div>
       <div class="col-sm-6 col-lg-4"><strong>數量:</strong> <span class="ms-1">${quantityText}</span></div>
       <div class="col-sm-6 col-lg-4"><strong>機具:</strong> <span class="ms-1">${machineText}</span></div>
+      <div class="col-sm-6 col-lg-4"><strong>車號:</strong> <span class="ms-1">${vehicleText}</span></div>
       <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">簽章狀態:</strong><span class="ms-1">${signatureBadge}</span></div>
 
       <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">收款狀態:</strong><span class="ms-1">${paidBadge}</span></div>
-      <div class="col-sm-6 col-lg-4 d-flex align-items-center gap-2 flex-wrap"><strong class="mb-0">同步狀態:</strong><span class="ms-1">${syncBadge}</span></div>
 
       <div class="col-12"><strong>作業狀況:</strong><br>${(item.work || '').replace(/\n/g,'<br>') || '-'}</div>
       <div class="col-12"><strong>備註:</strong><br>${(item.remark||'').replace(/\n/g,'<br>')||'-'}</div>
