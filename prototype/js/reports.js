@@ -14,6 +14,8 @@ const filterMachine = document.getElementById('filterMachine');
 const MACHINE_PLACEHOLDER_REGEX = /選擇機具/;
 const filterDriver = document.getElementById('filterDriver');
 const sortableHeaders = Array.from(document.querySelectorAll('th.sortable'));
+const customerSummaryBody = document.getElementById('customerSummaryBody');
+const customerSummaryFooter = document.getElementById('customerSummaryFooter');
 const machineCatalog = {
   map: new Map(),        // exact id -> display name
   alias: new Map(),      // normalized alias -> display name
@@ -63,7 +65,9 @@ const state = {
   filteredRows: [],
   viewRows: [],
   sortKey: 'date',
-  sortDirection: 'desc'
+  sortDirection: 'desc',
+  customerSummaryRows: [],
+  customerSummaryTotals: { customers: 0, count: 0, receivedCount: 0, amount: 0 }
 };
 
 const CSV_HEADERS = [
@@ -84,6 +88,14 @@ const CSV_HEADERS = [
 const EXPORT_LABELS_ZH = [
   '日期', '客戶', '物品', '起點', '訖點', '數量', '金額', '收款狀態', '型號/品名', '司機姓名', '車號'
 ];
+
+const SUMMARY_HEADERS = ['customer', 'count', 'receivedCount', 'amount'];
+const SUMMARY_LABELS_ZH = ['客戶', '簽單數', '已收款數', '總金額'];
+
+const CSV_INDEX = CSV_HEADERS.reduce((map, key, idx) => {
+  map[key] = idx;
+  return map;
+}, {});
 
 init();
 
@@ -265,9 +277,14 @@ function applyFilters() {
     return true;
   });
 
+  const summary = computeCustomerSummary(state.filteredRows);
+  state.customerSummaryRows = summary.rows;
+  state.customerSummaryTotals = summary.totals;
+
   applySort();
   renderTable();
   updateSortIndicators();
+  renderCustomerSummary();
 }
 
 function applySort() {
@@ -344,6 +361,7 @@ function renderErrorRow(message) {
     </tr>
   `;
   updateFooter();
+  renderCustomerSummary(true);
 }
 
 function updateFooter() {
@@ -352,6 +370,41 @@ function updateFooter() {
   const filtered = state.filteredRows.length;
   const visible = state.viewRows.length;
   tableFooter.textContent = `共 ${visible} 筆資料（篩選後 ${filtered} / 總計 ${total}）`;
+}
+
+function renderCustomerSummary(forceEmpty = false) {
+  if (!customerSummaryBody || !customerSummaryFooter) return;
+
+  if (forceEmpty || state.customerSummaryRows.length === 0) {
+    customerSummaryBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-muted py-3">目前沒有統計資料</td>
+      </tr>
+    `;
+    customerSummaryFooter.textContent = '總計 0 個客戶';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  state.customerSummaryRows.forEach(entry => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${entry.customer || '（未填寫）'}</td>
+      <td class="text-end">${formatInteger(entry.count)}</td>
+      <td class="text-end">${formatInteger(entry.receivedCount)}</td>
+      <td class="text-end">${formatCurrency(entry.amount)}</td>
+    `;
+    fragment.appendChild(tr);
+  });
+  customerSummaryBody.innerHTML = '';
+  customerSummaryBody.appendChild(fragment);
+
+  const totals = state.customerSummaryTotals;
+  const totalCustomers = totals.customers;
+  const totalCount = formatInteger(totals.count);
+  const received = formatInteger(totals.receivedCount);
+  const amount = formatCurrency(totals.amount);
+  customerSummaryFooter.textContent = `總計 ${totalCustomers} 個客戶｜簽單 ${totalCount} 筆｜已收款 ${received} 筆｜總金額 ${amount}`;
 }
 
 function renderReceivedCash(received) {
@@ -364,6 +417,11 @@ function renderReceivedCash(received) {
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return Number(value).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
+}
+
+function formatInteger(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return '0';
+  return Number(value).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
 }
 
 function formatCurrency(value) {
@@ -566,22 +624,43 @@ function handleExportCsv() {
     console.info('無資料可匯出');
     return;
   }
-  // 為了讓 Excel 更可靠地分欄，使用 Tab 分隔（TSV）並輸出為 UTF-16LE
   const DELIM = '\t';
-  // header 使用中文標題
   const headerLine = EXPORT_LABELS_ZH.join(DELIM);
-  // 針對 TSV 使用較簡單的序列化：移除 tab/newline，保留原始內容（不包引號）
-  const rows = state.viewRows.map(row => CSV_HEADERS.map(key => serializeForTsv(row[key])));
-  const csvLines = [headerLine, ...rows.map(cols => cols.join(DELIM))];
+  const detailRows = state.viewRows.map(row => CSV_HEADERS.map(key => serializeForTsv(transformExportValue(row, key))));
+  const csvLines = [headerLine, ...detailRows.map(cols => cols.join(DELIM))];
+
+  if (state.customerSummaryRows.length) {
+    const summaryDetailRows = state.customerSummaryRows.map(entry => buildSummaryDetailRow(entry));
+    summaryDetailRows.push(buildSummaryTotalsRow(state.customerSummaryTotals));
+    const summaryDetailLines = summaryDetailRows.map(row => row.map(value => serializeForTsv(value)).join(DELIM));
+    csvLines.push('');
+    csvLines.push(...summaryDetailLines);
+
+    csvLines.push('');
+    csvLines.push('客戶統計');
+    csvLines.push(SUMMARY_LABELS_ZH.join(DELIM));
+    state.customerSummaryRows.forEach(entry => {
+      const cols = SUMMARY_HEADERS.map(key => serializeForTsv(transformSummaryExportValue(entry, key)));
+      csvLines.push(cols.join(DELIM));
+    });
+    const totals = state.customerSummaryTotals;
+    const totalLine = [
+      '總計',
+      totals.count,
+      totals.receivedCount,
+      Number((Number(totals.quantity) || 0).toFixed(2)),
+      Number((Number(totals.amount) || 0).toFixed(0))
+    ].map(serializeForTsv).join(DELIM);
+    csvLines.push(totalLine);
+  }
+
   const csvContent = csvLines.join('\r\n');
 
-  // Debug: 印出要輸出的前 1K 內容（把 tab/newline 可視化）
   try {
-    console.log('[Reports] Export preview (header):', headerLine.replace(/\t/g,'[\\t]'));
-    console.log('[Reports] Export preview (first row):', (rows[0] || []).join(DELIM).replace(/\t/g,'[\\t]').slice(0, 1000));
-    console.log('[Reports] Raw preview (escaped):', csvContent.slice(0, 1000).replace(/\t/g,'[\\t]').replace(/\r?\n/g,'[\\n]'));
-  } catch (e) { /* ignore debug errors */ }
-  // 為了讓 Excel (Windows) 正確顯示中文，使用 UTF-16LE 編碼並加上 BOM (0xFF 0xFE)
+    console.log('[Reports] Export preview (detail header):', headerLine.replace(/\t/g,'[\\t]'));
+    console.log('[Reports] Export preview (first row):', (detailRows[0] || []).join(DELIM).replace(/\t/g,'[\\t]').slice(0, 1000));
+  } catch (e) { /* ignore debug logs */ }
+
   try {
     const bom = new Uint8Array([0xFF, 0xFE]);
     const buf = new ArrayBuffer(csvContent.length * 2);
@@ -593,10 +672,10 @@ function handleExportCsv() {
     }
     var blob = new Blob([bom, view], { type: 'text/tab-separated-values;charset=utf-16le;' });
   } catch (e) {
-    // 若環境不支援，上回退到 UTF-8 BOM
     const bomPrefixed = '\uFEFF' + csvContent;
     var blob = new Blob([bomPrefixed], { type: 'text/tab-separated-values;charset=utf-8;' });
   }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
@@ -633,9 +712,68 @@ async function exportXlsx() {
     '司機姓名': r.driverName || '',
     '車號': r.vehicleNumber || ''
   }));
+  if (state.customerSummaryRows.length) {
+    rows.push({
+      '日期': '',
+      '客戶': '客戶彙總',
+      '物品': '',
+      '起點': '',
+      '訖點': '',
+      '數量': '',
+      '金額': '',
+      '收款狀態': '',
+      '型號/品名': '',
+      '司機姓名': '',
+      '車號': ''
+    });
+    state.customerSummaryRows.forEach(entry => {
+      rows.push({
+        '日期': '',
+        '客戶': `${entry.customer || '（未填寫）'} (總計)`,
+        '物品': `簽單 ${formatInteger(entry.count)} 筆 / 已收款 ${formatInteger(entry.receivedCount)} 筆`,
+        '起點': '',
+        '訖點': '',
+        '數量': '',
+        '金額': Number((Number(entry.amount) || 0).toFixed(0)),
+        '收款狀態': '',
+        '型號/品名': '',
+        '司機姓名': '',
+        '車號': ''
+      });
+    });
+    rows.push({
+      '日期': '',
+      '客戶': '所有客戶 (總計)',
+      '物品': `簽單 ${formatInteger(state.customerSummaryTotals.count)} 筆 / 已收款 ${formatInteger(state.customerSummaryTotals.receivedCount)} 筆`,
+      '起點': '',
+      '訖點': '',
+      '數量': '',
+      '金額': Number((Number(state.customerSummaryTotals.amount) || 0).toFixed(0)),
+      '收款狀態': '',
+      '型號/品名': '',
+      '司機姓名': '',
+      '車號': ''
+    });
+  }
   const ws = XLSX.utils.json_to_sheet(rows, { header: EXPORT_LABELS_ZH });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '報表');
+  if (state.customerSummaryRows.length) {
+    const summaryRows = state.customerSummaryRows.map(entry => ({
+      '客戶': entry.customer || '（未填寫）',
+      '簽單數': entry.count,
+      '已收款數': entry.receivedCount,
+      '總金額': Number((Number(entry.amount) || 0).toFixed(0))
+    }));
+    summaryRows.push({
+      '客戶': '總計',
+      '簽單數': state.customerSummaryTotals.count,
+      '已收款數': state.customerSummaryTotals.receivedCount,
+      '總金額': Number((Number(state.customerSummaryTotals.amount) || 0).toFixed(0))
+    });
+    const wsSummary = XLSX.utils.json_to_sheet(summaryRows, { header: SUMMARY_LABELS_ZH });
+    XLSX.utils.book_append_sheet(wb, wsSummary, '客戶統計');
+  }
   const filename = `reports-${(new Date()).toISOString().replace(/[-:]/g,'').split('.')[0]}.xlsx`;
   XLSX.writeFile(wb, filename);
 }
@@ -656,4 +794,73 @@ function serializeForTsv(value) {
   // 將 CR/LF 及 tab 轉成一個空格，避免破壞欄位
   text = text.replace(/[\r\n\t]/g, ' ');
   return text;
+}
+
+function transformExportValue(row, key) {
+  switch (key) {
+    case 'receivedCash':
+      return row.receivedCash ? '已收款' : '待收款';
+    case 'amount':
+    case 'quantity':
+      return row[key] ?? '';
+    default:
+      return row[key];
+  }
+}
+
+function transformSummaryExportValue(entry, key) {
+  switch (key) {
+    case 'customer':
+      return entry.customer || '（未填寫）';
+    case 'count':
+      return entry.count;
+    case 'receivedCount':
+      return entry.receivedCount;
+    case 'amount':
+      return Number((Number(entry.amount) || 0).toFixed(0));
+    default:
+      return entry[key];
+  }
+}
+
+function computeCustomerSummary(rows) {
+  const map = new Map();
+  const totals = { customers: 0, count: 0, receivedCount: 0, amount: 0 };
+
+  rows.forEach(row => {
+    const rawName = row.customer && row.customer.trim ? row.customer.trim() : row.customer;
+    const name = rawName && rawName.length ? rawName : '（未填寫）';
+    if (!map.has(name)) {
+      map.set(name, { customer: name, count: 0, receivedCount: 0, amount: 0 });
+    }
+    const entry = map.get(name);
+    entry.count += 1;
+    entry.amount += Number(row.amount) || 0;
+    if (row.receivedCash) entry.receivedCount += 1;
+
+    totals.count += 1;
+    totals.amount += Number(row.amount) || 0;
+    if (row.receivedCash) totals.receivedCount += 1;
+  });
+
+  const rowsArr = Array.from(map.values()).sort((a, b) => b.amount - a.amount || a.customer.localeCompare(b.customer, 'zh-Hant'));
+  totals.customers = rowsArr.length;
+
+  return { rows: rowsArr, totals };
+}
+
+function buildSummaryDetailRow(entry) {
+  const row = CSV_HEADERS.map(() => '');
+  row[CSV_INDEX.customer] = `${entry.customer || '（未填寫）'} (總計)`;
+  row[CSV_INDEX.item] = `簽單 ${formatInteger(entry.count)} 筆 / 已收款 ${formatInteger(entry.receivedCount)} 筆`;
+  row[CSV_INDEX.amount] = Number((Number(entry.amount) || 0).toFixed(0));
+  return row;
+}
+
+function buildSummaryTotalsRow(totals) {
+  const row = CSV_HEADERS.map(() => '');
+  row[CSV_INDEX.customer] = '所有客戶 (總計)';
+  row[CSV_INDEX.item] = `簽單 ${formatInteger(totals.count)} 筆 / 已收款 ${formatInteger(totals.receivedCount)} 筆`;
+  row[CSV_INDEX.amount] = Number((Number(totals.amount) || 0).toFixed(0));
+  return row;
 }

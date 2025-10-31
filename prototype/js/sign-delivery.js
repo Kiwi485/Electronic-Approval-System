@@ -444,11 +444,12 @@ function startRealtimePending() {
       // 管理者：監聽所有待簽章（排序交給前端）
       q = query(base, where('signatureStatus', '==', 'pending'));
     } else {
-      // 司機：僅監聽自己看得到的待簽章
-      q = query(base, where('signatureStatus', '==', 'pending'), where('readableBy', 'array-contains', currentUid));
+      // 司機：僅監聽自己看得到的待簽章，避免需要 signatureStatus + readableBy 的複合索引
+      q = query(base, where('readableBy', 'array-contains', currentUid), limit(200));
     }
-    unsubscribePendingRealtime = onSnapshot(q, () => {
-      // 有任何變更時，重載一次清單（沿用既有渲染流程，避免大改）
+    unsubscribePendingRealtime = onSnapshot(q, (snap) => {
+      // 只有當實際有變化時才觸發重載，減少不必要的重新整理
+      if (!snap || snap.docChanges().length === 0) return;
       try { loadPendingList(); } catch {}
     }, (err) => {
       console.warn('[SignDebug] realtime pending snapshot error', err?.message || err);
