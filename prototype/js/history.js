@@ -1,5 +1,8 @@
 // history.js - 讀取簽單歷史 + 搜尋 + 分頁 + 詳情 (含離線未同步資料顯示)
 import { listHistoryDeliveries, getApiSource } from './api/index.js';
+import { db } from '../firebase-init.js';
+import { collection, query, orderBy, where, limit as qlimit, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
+import { getUserContext, onUserRoleReady } from './session-context.js';
 import { offlineManager } from './offline.js';
 
 console.log('📜 history.js 已載入，來源=', getApiSource());
@@ -327,6 +330,64 @@ async function loadData() {
 }
 
 loadData();
+// 啟用即時監聽（Firestore 模式時） —— 當 deliveryNotes 有變更時重新載入資料
+let unsubscribeHistoryFns = [];
+async function startRealtimeHistory() {
+  try {
+    if (getApiSource() !== 'firestore') return;
+    // 取消既有監聽
+    if (Array.isArray(unsubscribeHistoryFns)) {
+      unsubscribeHistoryFns.forEach(fn => { try { fn(); } catch {} });
+    }
+    unsubscribeHistoryFns = [];
+
+    const { uid, role } = await getUserContext();
+    const base = collection(db, 'deliveryNotes');
+
+    if (role === 'manager') {
+      try {
+        const q = query(base, orderBy('serverCreatedAt', 'desc'), qlimit(200));
+        const unsub = onSnapshot(q, (snap) => {
+          if (!snap || snap.docChanges().length === 0) return;
+          // 有變化就重新載入（避免複雜的合併邏輯）
+          loadData();
+        }, (err) => console.warn('[History] realtime snapshot error', err));
+        unsubscribeHistoryFns.push(unsub);
+      } catch (e) {
+        console.warn('[History] manager realtime setup failed', e);
+      }
+    } else {
+      // 非管理者：監聽使用者可見或被指派的文件
+      try {
+        const q1 = query(base, where('readableBy', 'array-contains', uid), qlimit(200));
+        unsubscribeHistoryFns.push(onSnapshot(q1, (snap) => { if (snap && snap.docChanges().length) loadData(); }, (err) => console.warn('[History] realtime readableBy error', err)));
+      } catch (e) { /* ignore */ }
+      try {
+        const q2 = query(base, where('assignedTo', 'array-contains', uid), qlimit(200));
+        unsubscribeHistoryFns.push(onSnapshot(q2, (snap) => { if (snap && snap.docChanges().length) loadData(); }, (err) => console.warn('[History] realtime assignedTo error', err)));
+      } catch (e) { /* ignore */ }
+      try {
+        const q3 = query(base, where('createdBy', '==', uid), qlimit(200));
+        unsubscribeHistoryFns.push(onSnapshot(q3, (snap) => { if (snap && snap.docChanges().length) loadData(); }, (err) => console.warn('[History] realtime createdBy error', err)));
+      } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn('[History] startRealtimeHistory failed', e);
+  }
+}
+
+// 當使用者角色就緒或變更時重啟監聽
+onUserRoleReady(() => {
+  try { startRealtimeHistory(); } catch (e) { console.warn('[History] startRealtimeHistory trigger failed', e); }
+});
+
+// 在頁面載入後建立監聽（若 session-context 已就緒則會立即生效）
+startRealtimeHistory();
+
+// 卸載時取消監聽
+window.addEventListener('beforeunload', () => {
+  if (Array.isArray(unsubscribeHistoryFns)) unsubscribeHistoryFns.forEach(fn => { try { fn(); } catch {} });
+});
 // 監聽離線同步事件，完成或失敗後重新載入
 window.addEventListener('offline-sync-done', (e) => {
   if (e?.detail?.count) console.log(`[History] 離線同步完成 ${e.detail.count} 筆`);

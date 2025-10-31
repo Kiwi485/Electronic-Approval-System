@@ -1,7 +1,7 @@
 // index-dashboard.js — 首頁儀表（直接接 Firestore，與 Mock 無關）
 import { db } from '../firebase-init.js';
 import {
-	collection, getDocs, query, where, orderBy, limit
+	collection, getDocs, query, where, orderBy, limit, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.6.11/firebase-firestore.js';
 import { getUserContext } from './session-context.js';
 
@@ -210,4 +210,51 @@ document.addEventListener('DOMContentLoaded', refresh);
 
 // 可選：每隔一段時間刷新
 setInterval(() => { try { refresh(); } catch {} }, 60 * 1000);
+
+// ---- 即時監聽：有變更時自動刷新 ----
+let unsubscribeDashboardFns = [];
+async function startRealtimeDashboard() {
+	try {
+		// 清理舊監聽
+		if (Array.isArray(unsubscribeDashboardFns)) {
+			unsubscribeDashboardFns.forEach(fn => { try { fn(); } catch {} });
+		}
+		unsubscribeDashboardFns = [];
+
+		const ctx = await getUserContext();
+		if (!ctx) return;
+		const { uid, role } = ctx;
+		const base = collection(db, 'deliveryNotes');
+
+		if (role === 'manager') {
+			// 監聽最近變更（交由前端 refresh 做整體重算與顯示）
+			try {
+				const q = query(base, orderBy('serverCreatedAt', 'desc'), limit(200));
+				const unsub = onSnapshot(q, (snap) => {
+					if (!snap || snap.docChanges().length === 0) return;
+					try { refresh(); } catch (e) { console.warn('[Dashboard] refresh on snapshot failed', e); }
+				}, (err) => console.warn('[Dashboard] realtime snapshot error', err));
+				unsubscribeDashboardFns.push(unsub);
+			} catch (e) {
+				console.warn('[Dashboard] manager realtime setup failed', e);
+			}
+		} else if (uid) {
+			// 非管理者：監聽自己可讀的資料（readableBy）
+			try {
+				const q1 = query(base, where('readableBy', 'array-contains', uid), limit(200));
+				unsubscribeDashboardFns.push(onSnapshot(q1, (snap) => { if (snap && snap.docChanges().length) { try { refresh(); } catch {} } }, (err) => console.warn('[Dashboard] realtime readableBy error', err)));
+			} catch (e) { /* ignore */ }
+		}
+	} catch (e) {
+		console.warn('[Dashboard] startRealtimeDashboard failed', e);
+	}
+}
+
+// 啟動即時監聽（保持原本的 DOMContentLoaded -> refresh）
+document.addEventListener('DOMContentLoaded', () => { try { startRealtimeDashboard(); } catch {} });
+
+// 卸載前取消監聽，避免資源洩漏
+window.addEventListener('beforeunload', () => {
+	if (Array.isArray(unsubscribeDashboardFns)) unsubscribeDashboardFns.forEach(fn => { try { fn(); } catch {} });
+});
 
